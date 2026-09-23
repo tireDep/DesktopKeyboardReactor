@@ -67,7 +67,7 @@ namespace CustomKeyboardReactor.Editor.Build
             PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
             PlayerSettings.resizableWindow = false;
             PlayerSettings.allowFullscreenSwitch = false;
-            PlayerSettings.useFlipModelSwapchain = true;
+            PlayerSettings.useFlipModelSwapchain = false;
 
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
             PlayerSettings.SetGraphicsAPIs(

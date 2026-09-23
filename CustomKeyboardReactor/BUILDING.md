@@ -5,7 +5,7 @@
 ## 0단계 기준 설정
 
 - 그래픽 API 자동 선택을 끄고 Direct3D 11만 사용한다.
-- DXGI Flip Model Swapchain을 사용한다.
+- DWM 투명화를 위해 DXGI Flip Model Swapchain을 끄고 D3D11 BitBlt 모델을 사용한다.
 - 플레이어는 창 모드로 시작하며 전체 화면 전환과 창 크기 조절을 끈다.
 - 포커스를 잃어도 실행을 계속한다.
 - `Assets/Scenes/Overlay.unity`의 카메라는 알파 0으로 화면을 지운다.

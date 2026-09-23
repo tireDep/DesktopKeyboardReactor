@@ -30,7 +30,7 @@ namespace CustomKeyboardReactor.Tests.EditMode
             Assert.That(PlayerSettings.fullScreenMode, Is.EqualTo(FullScreenMode.Windowed));
             Assert.That(PlayerSettings.resizableWindow, Is.False);
             Assert.That(PlayerSettings.allowFullscreenSwitch, Is.False);
-            Assert.That(PlayerSettings.useFlipModelSwapchain, Is.True);
+            Assert.That(PlayerSettings.useFlipModelSwapchain, Is.False);
         }
 
         // 오버레이 씬과 투명 카메라를 검증하는 함수
