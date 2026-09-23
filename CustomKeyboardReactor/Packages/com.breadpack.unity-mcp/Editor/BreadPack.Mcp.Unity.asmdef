@@ -1,0 +1,13 @@
+{
+    "name": "BreadPack.Mcp.Unity",
+    "rootNamespace": "BreadPack.Mcp.Unity",
+    "references": ["BreadPack.Mcp.Unity.Runtime"],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": ["Newtonsoft.Json.dll"],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}

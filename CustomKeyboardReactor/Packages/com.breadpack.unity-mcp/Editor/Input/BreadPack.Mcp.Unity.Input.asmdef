@@ -1,0 +1,16 @@
+{
+    "name": "BreadPack.Mcp.Unity.Input",
+    "rootNamespace": "BreadPack.Mcp.Unity.Input",
+    "references": [
+        "BreadPack.Mcp.Unity"
+    ],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": ["Newtonsoft.Json.dll"],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
