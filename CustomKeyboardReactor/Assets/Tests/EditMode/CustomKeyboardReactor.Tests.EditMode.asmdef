@@ -1,0 +1,22 @@
+{
+  "name": "CustomKeyboardReactor.Tests.EditMode",
+  "rootNamespace": "CustomKeyboardReactor.Tests.EditMode",
+  "references": [
+    "CustomKeyboardReactor.Runtime",
+    "CustomKeyboardReactor.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}
