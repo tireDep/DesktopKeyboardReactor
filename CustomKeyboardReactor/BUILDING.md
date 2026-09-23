@@ -12,14 +12,31 @@
 - Edit Mode 테스트 결과는 `TestResults/EditMode.xml`에 기록한다.
 - Windows 빌드는 `Builds/Windows/CustomKeyboardReactor.exe`에 생성한다.
 
-실제 창 투명화, 보더리스, 항상 위와 클릭 통과는 1단계의 `OverlayWindowService`에서 구현하고 Windows Standalone으로 검증한다.
+## 1단계 투명 오버레이
+
+- `OverlayWindowService`가 플레이어 창 핸들을 지연 획득한 뒤 DWM 투명화, 보더리스, 항상 위와 클릭 통과를 적용한다.
+- 포커스와 디스플레이 구성이 바뀌면 창 속성을 다시 적용한다.
+- 종료할 때 초기 창 스타일과 항상 위 상태를 복원한다.
+- 런타임에 중앙의 청록색 불투명 이미지를 생성해 투명 배경과 렌더링 결과를 구분한다.
+- 불투명 검증 이미지 위에서는 창이 클릭을 받고 나머지 영역에서는 클릭이 아래 창으로 통과한다.
+- 실제 캐릭터 이미지의 알파 기반 클릭 판정은 개발 순서 5단계에서 구현한다.
 
 ## Unity Editor 절차
 
 1. `Custom Keyboard Reactor > Phase 0 > Configure Baseline`을 실행한다.
 2. Unity Test Runner에서 Edit Mode 테스트를 실행한다.
 3. `Custom Keyboard Reactor > Phase 0 > Build Windows 64-bit`을 실행한다.
-4. `Builds/Windows/CustomKeyboardReactor.exe`를 실행해 빈 플레이어가 시작되는지 확인한다.
+4. `Builds/Windows/CustomKeyboardReactor.exe`를 실행해 아래 1단계 수동 검증을 진행한다.
+
+## 1단계 수동 검증
+
+1. 바탕 화면에 클릭 결과를 확인할 수 있는 앱을 열어 둔다.
+2. 빌드를 실행하고 창 테두리와 불투명 배경 없이 중앙의 청록색 이미지만 보이는지 확인한다.
+3. 다른 창을 활성화해도 오버레이 이미지가 위에 유지되는지 확인한다.
+4. 오버레이의 투명 영역을 클릭했을 때 아래 앱이 입력을 받는지 확인한다.
+5. 청록색 이미지 위를 클릭했을 때 아래 앱이 입력을 받지 않는지 확인한다.
+6. 작업 표시줄에서 오버레이를 다시 활성화한 뒤 투명화와 항상 위 상태가 유지되는지 확인한다.
+7. 앱을 정상 종료하고 Unity 로그에 처리되지 않은 예외가 없는지 확인한다.
 
 ## 명령줄 절차
 
