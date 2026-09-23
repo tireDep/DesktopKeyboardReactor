@@ -6,7 +6,24 @@
 # See: https://github.com/github/gitignore/tree/main/Global
 #
 
-/docs
+/.scratch/
 
+/docs/*
+!/docs/README.md
+!/docs/product-specification.md
+!/docs/technical-design.md
+!/docs/development-roadmap.md
+!/docs/coding-standards.md
+!/docs/adr/
+!/docs/Rules/
+
+docs/Rules/rules.md
 AGENTS.md
-
+CONTEXT.md
+docs/coding-standards.md
+docs/development-roadmap.md
+docs/product-specification.md
+docs/README.md
+docs/technical-design.md
+docs/adr/0001-use-win32-for-overlay-and-global-input.md
+docs/adr/0002-copy-preset-assets-into-app-data.md
