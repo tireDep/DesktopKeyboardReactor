@@ -31,6 +31,48 @@ namespace CustomKeyboardReactor.Tests.EditMode
             Assert.That(PlayerSettings.resizableWindow, Is.False);
             Assert.That(PlayerSettings.allowFullscreenSwitch, Is.False);
             Assert.That(PlayerSettings.useFlipModelSwapchain, Is.False);
+            Assert.That(QualitySettings.vSyncCount, Is.Zero);
+        }
+
+        // 오버레이 렌더링 프레임 제한을 검증하는 함수
+        [Test]
+        public void OverlayPerformanceSettings_LimitsBackgroundRenderingToSixtyFramesPerSecond()
+        {
+            int originalTargetFrameRate = Application.targetFrameRate; // 기존 목표 프레임 속도
+            int originalVSyncCount = QualitySettings.vSyncCount; // 기존 수직 동기화 간격
+
+            try
+            {
+                Application.targetFrameRate = -1;
+                OverlayPerformanceSettings.Apply();
+
+                Assert.That(Application.targetFrameRate, Is.EqualTo(OverlayPerformanceSettings.TargetFrameRate));
+                Assert.That(QualitySettings.vSyncCount, Is.Zero);
+            }
+            finally
+            {
+                Application.targetFrameRate = originalTargetFrameRate;
+                QualitySettings.vSyncCount = originalVSyncCount;
+            }
+        }
+
+        // PC 렌더 파이프라인의 불필요한 프레임 텍스처 비활성화를 검증하는 함수
+        [Test]
+        public void PcRenderPipeline_DisablesUnusedFrameTextures()
+        {
+            const string pcRenderPipelineAssetPath = "Assets/Settings/PC_RPAsset.asset"; // PC 렌더 파이프라인 에셋 경로
+            RenderPipelineAsset renderPipelineAsset = AssetDatabase.LoadAssetAtPath<RenderPipelineAsset>( // PC 렌더 파이프라인 에셋
+                pcRenderPipelineAssetPath);
+            Assert.That(renderPipelineAsset, Is.Not.Null);
+
+            SerializedObject serializedAsset = new SerializedObject(renderPipelineAsset); // 렌더 파이프라인 직렬화 객체
+            SerializedProperty depthTextureProperty = serializedAsset.FindProperty("m_RequireDepthTexture"); // 깊이 텍스처 설정
+            SerializedProperty opaqueTextureProperty = serializedAsset.FindProperty("m_RequireOpaqueTexture"); // 불투명 텍스처 설정
+
+            Assert.That(depthTextureProperty, Is.Not.Null);
+            Assert.That(opaqueTextureProperty, Is.Not.Null);
+            Assert.That(depthTextureProperty.boolValue, Is.False);
+            Assert.That(opaqueTextureProperty.boolValue, Is.False);
         }
 
         // 오버레이 씬과 투명 카메라를 검증하는 함수

@@ -39,6 +39,7 @@ namespace CustomKeyboardReactor
         // 창 서비스와 임시 검증 이미지를 준비하는 함수
         private void OnEnable()
         {
+            OverlayPerformanceSettings.Apply();
             _windowService = new OverlayWindowService();
             Display.onDisplaysUpdated += HandleDisplaysUpdated;
 
