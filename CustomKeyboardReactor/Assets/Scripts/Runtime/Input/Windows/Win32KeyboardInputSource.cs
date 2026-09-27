@@ -1,0 +1,222 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+namespace CustomKeyboardReactor
+{
+    // Win32 저수준 훅으로 전역 키보드 반응 입력을 수집하는 클래스
+    public sealed class Win32KeyboardInputSource : IActivityInputSource
+    {
+        private readonly ConcurrentQueue<ActivityInputEvent> _pendingInputs = new ConcurrentQueue<ActivityInputEvent>(); // 대기 중인 키보드 반응 입력 큐
+
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        private const int KeyboardHookType = 13; // 저수준 키보드 훅 종류
+        private const uint KeyDownMessage = 0x0100; // 키 누름 메시지
+        private const uint KeyUpMessage = 0x0101; // 키 해제 메시지
+        private const uint SystemKeyDownMessage = 0x0104; // 시스템 키 누름 메시지
+        private const uint SystemKeyUpMessage = 0x0105; // 시스템 키 해제 메시지
+        private const uint ExtendedKeyFlag = 0x00000001; // 확장 키 플래그
+        private const uint LowerIntegrityInjectedFlag = 0x00000002; // 낮은 무결성 주입 플래그
+        private const uint InjectedFlag = 0x00000010; // 주입 입력 플래그
+        private const uint ExtendedKeyIdentifierFlag = 0x00010000; // 확장 스캔 코드 구분 플래그
+
+        private static readonly NativeMethods.KeyboardHookCallback HookCallback = HandleHook; // 키보드 훅 콜백 참조
+        private static Win32KeyboardInputSource _activeSource; // 활성 키보드 입력 공급자
+
+        private readonly HashSet<uint> _pressedKeyIdentifiers = new HashSet<uint>(); // 현재 눌린 스캔 코드 목록
+        private IntPtr _hookHandle; // 키보드 훅 핸들
+#endif
+
+        public bool IsRunning { get; private set; } // 키보드 훅 실행 여부
+
+        // 전역 키보드 훅을 설치하는 함수
+        public bool TryStart()
+        {
+            if (IsRunning)
+            {
+                return true;
+            }
+
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            if (_activeSource != null && !ReferenceEquals(_activeSource, this))
+            {
+                return false;
+            }
+
+            IntPtr moduleHandle = NativeMethods.GetModuleHandle(null); // 현재 실행 모듈 핸들
+            if (moduleHandle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            _activeSource = this;
+            _hookHandle = NativeMethods.SetWindowsHookEx(
+                KeyboardHookType,
+                HookCallback,
+                moduleHandle,
+                0);
+            if (_hookHandle == IntPtr.Zero)
+            {
+                _activeSource = null;
+                return false;
+            }
+
+            IsRunning = true;
+            return true;
+#else
+            return false;
+#endif
+        }
+
+        // 전역 키보드 훅을 해제하는 함수
+        public void Stop()
+        {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            if (_hookHandle != IntPtr.Zero)
+            {
+                if (!NativeMethods.UnhookWindowsHookEx(_hookHandle))
+                {
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                }
+
+                _hookHandle = IntPtr.Zero;
+            }
+
+            _pressedKeyIdentifiers.Clear();
+            if (ReferenceEquals(_activeSource, this))
+            {
+                _activeSource = null;
+            }
+#endif
+
+            ClearPendingInputs();
+            IsRunning = false;
+        }
+
+        // 대기 중인 키보드 반응 입력을 반환하는 함수
+        public bool TryDequeue(out ActivityInputEvent inputEvent)
+        {
+            return _pendingInputs.TryDequeue(out inputEvent);
+        }
+
+        // 키보드 훅 자원을 정리하는 함수
+        public void Dispose()
+        {
+            Stop();
+        }
+
+        // 대기 중인 키보드 입력을 비우는 함수
+        private void ClearPendingInputs()
+        {
+            ActivityInputEvent inputEvent; // 제거할 키보드 반응 입력
+            while (_pendingInputs.TryDequeue(out inputEvent))
+            {
+            }
+        }
+
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        // Win32 키보드 메시지를 반응 입력으로 변환하는 함수
+        private static IntPtr HandleHook(int code, IntPtr messagePointer, IntPtr dataPointer)
+        {
+            Win32KeyboardInputSource activeSource = _activeSource; // 활성 키보드 입력 공급자
+            if (code >= 0 && activeSource != null)
+            {
+                try
+                {
+                    activeSource.ProcessKeyboardMessage(messagePointer, dataPointer);
+                }
+                catch
+                {
+                    // 훅 체인 보호
+                }
+            }
+
+            IntPtr hookHandle = activeSource?._hookHandle ?? IntPtr.Zero; // 다음 훅 전달용 핸들
+            return NativeMethods.CallNextHookEx(hookHandle, code, messagePointer, dataPointer);
+        }
+
+        // 키 누름과 해제 메시지에서 반복 및 주입 입력을 제거하는 함수
+        private void ProcessKeyboardMessage(IntPtr messagePointer, IntPtr dataPointer)
+        {
+            uint message = unchecked((uint)messagePointer.ToInt64()); // 키보드 메시지 종류
+            bool isKeyDown = message == KeyDownMessage || message == SystemKeyDownMessage; // 키 누름 여부
+            bool isKeyUp = message == KeyUpMessage || message == SystemKeyUpMessage; // 키 해제 여부
+            if (!isKeyDown && !isKeyUp)
+            {
+                return;
+            }
+
+            NativeMethods.KeyboardHookData hookData =
+                Marshal.PtrToStructure<NativeMethods.KeyboardHookData>(dataPointer); // 키보드 훅 데이터
+            if ((hookData.Flags & (InjectedFlag | LowerIntegrityInjectedFlag)) != 0)
+            {
+                return;
+            }
+
+            uint keyIdentifier = (hookData.Flags & ExtendedKeyFlag) != 0 // 반복 판정용 스캔 코드
+                ? hookData.ScanCode | ExtendedKeyIdentifierFlag
+                : hookData.ScanCode;
+            if (isKeyUp)
+            {
+                _pressedKeyIdentifiers.Remove(keyIdentifier);
+                return;
+            }
+
+            if (!_pressedKeyIdentifiers.Add(keyIdentifier))
+            {
+                return;
+            }
+
+            _pendingInputs.Enqueue(ActivityInputEvent.CreateKeyboard());
+        }
+
+        // Win32 키보드 훅 API를 격리하는 클래스
+        private static class NativeMethods
+        {
+            // 저수준 키보드 훅 콜백 형식
+            internal delegate IntPtr KeyboardHookCallback(
+                int code,
+                IntPtr messagePointer,
+                IntPtr dataPointer);
+
+            // 저수준 키보드 훅 데이터를 보관하는 구조체
+            [StructLayout(LayoutKind.Sequential)]
+            internal struct KeyboardHookData
+            {
+                public uint VirtualKeyCode; // 가상 키 코드
+                public uint ScanCode; // 물리 스캔 코드
+                public uint Flags; // 키보드 훅 플래그
+                public uint Time; // 메시지 발생 시간
+                public UIntPtr ExtraInfo; // 추가 입력 정보
+            }
+
+            // Windows 훅을 설치하는 함수
+            [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
+            internal static extern IntPtr SetWindowsHookEx(
+                int hookType,
+                KeyboardHookCallback callback,
+                IntPtr moduleHandle,
+                uint threadId);
+
+            // Windows 훅을 해제하는 함수
+            [DllImport("user32.dll", SetLastError = true)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static extern bool UnhookWindowsHookEx(IntPtr hookHandle);
+
+            // 다음 Windows 훅으로 메시지를 전달하는 함수
+            [DllImport("user32.dll")]
+            internal static extern IntPtr CallNextHookEx(
+                IntPtr hookHandle,
+                int code,
+                IntPtr messagePointer,
+                IntPtr dataPointer);
+
+            // 현재 실행 모듈 핸들을 조회하는 함수
+            [DllImport("kernel32.dll", EntryPoint = "GetModuleHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+            internal static extern IntPtr GetModuleHandle(string moduleName);
+        }
+#endif
+    }
+}
