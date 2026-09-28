@@ -13,13 +13,22 @@ namespace CustomKeyboardReactor
         public ActivityInputCoordinator(
             IActivityInputSource keyboardInputSource,
             IActivityInputSource mouseButtonInputSource,
-            Predicate<ActivityInputEvent> isMouseInputExcluded = null)
+            Predicate<ActivityInputEvent> isMouseInputExcluded = null,
+            long initialTotalInputCount = 0L)
         {
             _keyboardInputSource = keyboardInputSource ??
                                    throw new ArgumentNullException(nameof(keyboardInputSource));
             _mouseButtonInputSource = mouseButtonInputSource ??
                                       throw new ArgumentNullException(nameof(mouseButtonInputSource));
+            if (initialTotalInputCount < 0L)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(initialTotalInputCount),
+                    "Initial total input count cannot be negative.");
+            }
+
             _isMouseInputExcluded = isMouseInputExcluded;
+            TotalInputCount = initialTotalInputCount;
         }
 
         public long TotalInputCount { get; private set; } // 전체 입력 수

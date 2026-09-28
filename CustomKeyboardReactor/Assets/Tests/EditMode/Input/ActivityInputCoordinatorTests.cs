@@ -24,6 +24,23 @@ namespace CustomKeyboardReactor.Tests.EditMode
             Assert.That(coordinator.TotalInputCount, Is.EqualTo(2L));
         }
 
+        // 저장된 전체 입력 수에서 새로운 반응 입력을 이어서 집계하는지 검증하는 함수
+        [Test]
+        public void ProcessPendingInputs_WithInitialCount_ContinuesPersistedCount()
+        {
+            FakeActivityInputSource keyboardInputSource = new FakeActivityInputSource(); // 키보드 반응 입력 공급자
+            FakeActivityInputSource mouseButtonInputSource = new FakeActivityInputSource(); // 마우스 버튼 반응 입력 공급자
+            keyboardInputSource.Enqueue(ActivityInputEvent.CreateKeyboard());
+            ActivityInputCoordinator coordinator = new ActivityInputCoordinator( // 반응 입력 조정기
+                keyboardInputSource,
+                mouseButtonInputSource,
+                initialTotalInputCount: 41L);
+
+            coordinator.ProcessPendingInputs();
+
+            Assert.That(coordinator.TotalInputCount, Is.EqualTo(42L));
+        }
+
         // 설정 상태에서 받은 입력이 이후에도 집계되지 않는지 검증하는 함수
         [Test]
         public void ProcessPendingInputs_WhenConfiguring_DiscardsQueuedActivity()

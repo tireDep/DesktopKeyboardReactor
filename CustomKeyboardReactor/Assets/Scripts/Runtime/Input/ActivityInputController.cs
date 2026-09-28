@@ -10,6 +10,7 @@ namespace CustomKeyboardReactor
         private const string ControllerObjectName = "Activity Input Controller"; // 컨트롤러 오브젝트 이름
 
         private ActivityInputCoordinator _coordinator; // 반응 입력 조정기
+        private UserSettingsRepository _userSettingsRepository; // 공용 설정 저장소
         private Predicate<ActivityInputEvent> _isMouseInputExcluded; // 자체 마우스 입력 판정 함수
         private bool _keyboardReactionEnabled = true; // 키보드 반응 활성 여부
         private bool _mouseButtonReactionEnabled = true; // 마우스 버튼 반응 활성 여부
@@ -85,6 +86,7 @@ namespace CustomKeyboardReactor
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             if (_coordinator == null)
             {
+                long initialTotalInputCount = LoadPersistentData(); // 저장된 전체 입력 수
                 Win32KeyboardInputSource globalKeyboardInputSource =
                     new Win32KeyboardInputSource(); // 외부 포커스 키보드 입력 공급자
                 UnityFocusedKeyboardInputSource focusedKeyboardInputSource =
@@ -98,7 +100,8 @@ namespace CustomKeyboardReactor
                 _coordinator = new ActivityInputCoordinator(
                     keyboardInputSource,
                     new Win32MouseButtonInputSource(),
-                    _isMouseInputExcluded)
+                    _isMouseInputExcluded,
+                    initialTotalInputCount)
                 {
                     KeyboardReactionEnabled = _keyboardReactionEnabled,
                     MouseButtonReactionEnabled = _mouseButtonReactionEnabled,
@@ -122,13 +125,57 @@ namespace CustomKeyboardReactor
         // 전역 입력 훅과 조정기를 정리하는 함수
         private void OnDisable()
         {
+            TrySaveTotalInputCount();
             TryReleaseCoordinator();
         }
 
         // 오브젝트 파괴 시 남은 전역 입력 훅 정리를 다시 시도하는 함수
         private void OnDestroy()
         {
+            TrySaveTotalInputCount();
             TryReleaseCoordinator();
+        }
+
+        // 영구 저장 데이터와 공용 설정을 불러오는 함수
+        private long LoadPersistentData()
+        {
+            try
+            {
+                PresetAssetStore presetAssetStore = new PresetAssetStore( // 프리셋 이미지 저장소
+                    Application.persistentDataPath);
+                AppDataStore appDataStore = new AppDataStore( // 앱 데이터 저장소
+                    Application.persistentDataPath,
+                    presetAssetStore);
+                _userSettingsRepository = new UserSettingsRepository(appDataStore);
+                GlobalSettingsData settings = _userSettingsRepository.GetSettings(); // 저장된 공용 설정
+                _keyboardReactionEnabled = settings.KeyboardReactionEnabled;
+                _mouseButtonReactionEnabled = settings.MouseReactionEnabled;
+                return _userSettingsRepository.GetTotalInputCount();
+            }
+            catch (Exception exception)
+            {
+                _userSettingsRepository = null;
+                Debug.LogError($"Failed to load persistent reactor data: {exception.Message}");
+                return 0L;
+            }
+        }
+
+        // 현재 전체 입력 수를 영구 저장 데이터에 반영하는 함수
+        private void TrySaveTotalInputCount()
+        {
+            if (_coordinator == null || _userSettingsRepository == null)
+            {
+                return;
+            }
+
+            try
+            {
+                _userSettingsRepository.SaveTotalInputCount(_coordinator.TotalInputCount);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"Failed to save total input count: {exception.Message}");
+            }
         }
 
         // 전역 입력 훅을 정리하고 성공한 조정기 참조만 해제하는 함수
