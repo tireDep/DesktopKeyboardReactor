@@ -85,8 +85,18 @@ namespace CustomKeyboardReactor
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             if (_coordinator == null)
             {
+                Win32KeyboardInputSource globalKeyboardInputSource =
+                    new Win32KeyboardInputSource(); // 외부 포커스 키보드 입력 공급자
+                UnityFocusedKeyboardInputSource focusedKeyboardInputSource =
+                    new UnityFocusedKeyboardInputSource(); // 내부 포커스 키보드 입력 공급자
+                FocusAwareKeyboardInputSource keyboardInputSource =
+                    new FocusAwareKeyboardInputSource( // 포커스 대응 키보드 입력 공급자
+                        globalKeyboardInputSource,
+                        focusedKeyboardInputSource,
+                        () => Application.isFocused);
+
                 _coordinator = new ActivityInputCoordinator(
-                    new Win32KeyboardInputSource(),
+                    keyboardInputSource,
                     new Win32MouseButtonInputSource(),
                     _isMouseInputExcluded)
                 {

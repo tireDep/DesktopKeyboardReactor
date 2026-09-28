@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace CustomKeyboardReactor
 {
@@ -21,12 +22,20 @@ namespace CustomKeyboardReactor
         private const uint LowerIntegrityInjectedFlag = 0x00000002; // 낮은 무결성 주입 플래그
         private const uint InjectedFlag = 0x00000010; // 주입 입력 플래그
         private const uint ExtendedKeyIdentifierFlag = 0x00010000; // 확장 스캔 코드 구분 플래그
+        private const uint QuitMessage = 0x0012; // 훅 스레드 종료 메시지
+        private const uint NoRemoveMessage = 0x0000; // 메시지 큐 생성 플래그
 
         private static readonly NativeMethods.KeyboardHookCallback HookCallback = HandleHook; // 키보드 훅 콜백 참조
         private static Win32KeyboardInputSource _activeSource; // 활성 키보드 입력 공급자
 
         private readonly HashSet<uint> _pressedKeyIdentifiers = new HashSet<uint>(); // 현재 눌린 스캔 코드 목록
         private IntPtr _hookHandle; // 키보드 훅 핸들
+        private ManualResetEventSlim _hookStartupCompleted; // 훅 스레드 시작 완료 신호
+        private Thread _hookThread; // 키보드 훅 메시지 스레드
+        private Exception _hookThreadException; // 훅 스레드 예외
+        private uint _hookThreadId; // 키보드 훅 스레드 식별자
+        private bool _hookStartupSucceeded; // 키보드 훅 시작 성공 여부
+
 #endif
 
         public bool IsRunning { get; private set; } // 키보드 훅 실행 여부
@@ -45,25 +54,26 @@ namespace CustomKeyboardReactor
                 return false;
             }
 
-            IntPtr moduleHandle = NativeMethods.GetModuleHandle(null); // 현재 실행 모듈 핸들
-            if (moduleHandle == IntPtr.Zero)
-            {
-                return false;
-            }
-
             _activeSource = this;
-            _hookHandle = NativeMethods.SetWindowsHookEx(
-                KeyboardHookType,
-                HookCallback,
-                moduleHandle,
-                0);
-            if (_hookHandle == IntPtr.Zero)
+            _hookStartupSucceeded = false;
+            _hookThreadException = null;
+            _hookStartupCompleted = new ManualResetEventSlim(false);
+            _hookThread = new Thread(RunHookThread)
             {
+                IsBackground = true,
+                Name = "CustomKeyboardReactor Keyboard Hook",
+            };
+            _hookThread.Start();
+            _hookStartupCompleted.Wait();
+
+            if (!_hookStartupSucceeded)
+            {
+                _hookThread.Join();
+                ReleaseHookThreadState();
                 _activeSource = null;
                 return false;
             }
 
-            IsRunning = true;
             return true;
 #else
             return false;
@@ -74,20 +84,32 @@ namespace CustomKeyboardReactor
         public void Stop()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            if (_hookHandle != IntPtr.Zero)
+            Thread hookThread = _hookThread; // 종료할 키보드 훅 스레드
+            if (hookThread != null)
             {
-                if (!NativeMethods.UnhookWindowsHookEx(_hookHandle))
+                if (hookThread.IsAlive && !NativeMethods.PostThreadMessage(
+                        _hookThreadId,
+                        QuitMessage,
+                        UIntPtr.Zero,
+                        IntPtr.Zero))
                 {
                     throw new Win32Exception(Marshal.GetLastWin32Error());
                 }
 
-                _hookHandle = IntPtr.Zero;
+                hookThread.Join();
             }
 
+            Exception hookThreadException = _hookThreadException; // 종료 중 발생한 훅 스레드 예외
+            ReleaseHookThreadState();
             _pressedKeyIdentifiers.Clear();
             if (ReferenceEquals(_activeSource, this))
             {
                 _activeSource = null;
+            }
+
+            if (hookThreadException != null)
+            {
+                throw hookThreadException;
             }
 #endif
 
@@ -117,6 +139,100 @@ namespace CustomKeyboardReactor
         }
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        // 전용 메시지 루프에서 키보드 훅을 실행하는 함수
+        private void RunHookThread()
+        {
+            bool startupSignaled = false; // 훅 시작 결과 전달 여부
+            try
+            {
+                _hookThreadId = NativeMethods.GetCurrentThreadId();
+                NativeMethods.MessageData messageData; // 훅 스레드 메시지 데이터
+                NativeMethods.PeekMessage(
+                    out messageData,
+                    IntPtr.Zero,
+                    0,
+                    0,
+                    NoRemoveMessage);
+
+                IntPtr moduleHandle = NativeMethods.GetModuleHandle(null); // 현재 실행 모듈 핸들
+                if (moduleHandle == IntPtr.Zero)
+                {
+                    _hookThreadException = new Win32Exception(Marshal.GetLastWin32Error());
+                    return;
+                }
+
+                _hookHandle = NativeMethods.SetWindowsHookEx(
+                    KeyboardHookType,
+                    HookCallback,
+                    moduleHandle,
+                    0);
+                if (_hookHandle == IntPtr.Zero)
+                {
+                    _hookThreadException = new Win32Exception(Marshal.GetLastWin32Error());
+                    return;
+                }
+
+                _hookStartupSucceeded = true;
+                IsRunning = true;
+                _hookStartupCompleted.Set();
+                startupSignaled = true;
+
+                while (true)
+                {
+                    int messageResult = NativeMethods.GetMessage( // 메시지 조회 결과
+                        out messageData,
+                        IntPtr.Zero,
+                        0,
+                        0);
+                    if (messageResult > 0)
+                    {
+                        continue;
+                    }
+
+                    if (messageResult < 0)
+                    {
+                        _hookThreadException = new Win32Exception(Marshal.GetLastWin32Error());
+                    }
+
+                    break;
+                }
+            }
+            catch (Exception exception)
+            {
+                _hookThreadException = exception;
+            }
+            finally
+            {
+                if (!startupSignaled)
+                {
+                    _hookStartupCompleted.Set();
+                }
+
+                if (_hookHandle != IntPtr.Zero)
+                {
+                    if (!NativeMethods.UnhookWindowsHookEx(_hookHandle) && _hookThreadException == null)
+                    {
+                        _hookThreadException = new Win32Exception(Marshal.GetLastWin32Error());
+                    }
+
+                    _hookHandle = IntPtr.Zero;
+                }
+
+                IsRunning = false;
+            }
+        }
+
+        // 종료된 키보드 훅 스레드 상태를 정리하는 함수
+        private void ReleaseHookThreadState()
+        {
+            _hookStartupCompleted?.Dispose();
+            _hookStartupCompleted = null;
+            _hookThread = null;
+            _hookThreadId = 0;
+            _hookStartupSucceeded = false;
+            _hookThreadException = null;
+        }
+
         // Win32 키보드 메시지를 반응 입력으로 변환하는 함수
         private static IntPtr HandleHook(int code, IntPtr messagePointer, IntPtr dataPointer)
         {
@@ -192,6 +308,27 @@ namespace CustomKeyboardReactor
                 public UIntPtr ExtraInfo; // 추가 입력 정보
             }
 
+            // Win32 메시지 루프 데이터를 보관하는 구조체
+            [StructLayout(LayoutKind.Sequential)]
+            internal struct MessageData
+            {
+                public IntPtr WindowHandle; // 대상 창 핸들
+                public uint Message; // 메시지 종류
+                public UIntPtr WParam; // 메시지 부가 값
+                public IntPtr LParam; // 메시지 데이터 포인터
+                public uint Time; // 메시지 발생 시간
+                public PointData Point; // 메시지 발생 좌표
+                public uint Private; // 시스템 전용 값
+            }
+
+            // Win32 메시지 좌표를 보관하는 구조체
+            [StructLayout(LayoutKind.Sequential)]
+            internal struct PointData
+            {
+                public int X; // 가로 좌표
+                public int Y; // 세로 좌표
+            }
+
             // Windows 훅을 설치하는 함수
             [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
             internal static extern IntPtr SetWindowsHookEx(
@@ -213,9 +350,40 @@ namespace CustomKeyboardReactor
                 IntPtr messagePointer,
                 IntPtr dataPointer);
 
+            // 현재 스레드의 메시지 큐를 준비하는 함수
+            [DllImport("user32.dll", EntryPoint = "PeekMessageW")]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static extern bool PeekMessage(
+                out MessageData messageData,
+                IntPtr windowHandle,
+                uint minimumMessage,
+                uint maximumMessage,
+                uint removeMessage);
+
+            // 훅 스레드에서 다음 메시지를 기다리는 함수
+            [DllImport("user32.dll", EntryPoint = "GetMessageW", SetLastError = true)]
+            internal static extern int GetMessage(
+                out MessageData messageData,
+                IntPtr windowHandle,
+                uint minimumMessage,
+                uint maximumMessage);
+
+            // 훅 스레드에 종료 메시지를 보내는 함수
+            [DllImport("user32.dll", EntryPoint = "PostThreadMessageW", SetLastError = true)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static extern bool PostThreadMessage(
+                uint threadId,
+                uint message,
+                UIntPtr wParam,
+                IntPtr lParam);
+
             // 현재 실행 모듈 핸들을 조회하는 함수
             [DllImport("kernel32.dll", EntryPoint = "GetModuleHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
             internal static extern IntPtr GetModuleHandle(string moduleName);
+
+            // 현재 Win32 스레드 식별자를 조회하는 함수
+            [DllImport("kernel32.dll")]
+            internal static extern uint GetCurrentThreadId();
         }
 #endif
     }

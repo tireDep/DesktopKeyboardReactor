@@ -1,7 +1,9 @@
 {
   "name": "CustomKeyboardReactor.Runtime",
   "rootNamespace": "CustomKeyboardReactor",
-  "references": [],
+  "references": [
+    "Unity.InputSystem"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
