@@ -17,6 +17,8 @@ namespace CustomKeyboardReactor
         private bool _isConfiguring; // 설정 상태 여부
 
         public long TotalInputCount => _coordinator?.TotalInputCount ?? 0L; // 전체 입력 수
+        public event Action<ActivityInputEvent> ActivityAccepted; // 승인된 반응 입력 전달 이벤트
+
         public bool KeyboardReactionEnabled // 키보드 반응 활성 여부
         {
             get => _keyboardReactionEnabled;
@@ -107,6 +109,7 @@ namespace CustomKeyboardReactor
                     MouseButtonReactionEnabled = _mouseButtonReactionEnabled,
                     IsConfiguring = _isConfiguring,
                 };
+                _coordinator.ActivityAccepted += HandleActivityAccepted;
             }
 
             if (!_coordinator.TryStart())
@@ -178,6 +181,12 @@ namespace CustomKeyboardReactor
             }
         }
 
+        // 조정기가 승인한 반응 입력을 런타임 구독자에게 전달하는 함수
+        private void HandleActivityAccepted(ActivityInputEvent inputEvent)
+        {
+            ActivityAccepted?.Invoke(inputEvent);
+        }
+
         // 전역 입력 훅을 정리하고 성공한 조정기 참조만 해제하는 함수
         private void TryReleaseCoordinator()
         {
@@ -189,6 +198,7 @@ namespace CustomKeyboardReactor
             try
             {
                 _coordinator.Dispose();
+                _coordinator.ActivityAccepted -= HandleActivityAccepted;
                 _coordinator = null;
             }
             catch (Exception exception)

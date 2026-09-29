@@ -19,8 +19,8 @@
 - `OverlayWindowService`가 플레이어 창 핸들을 지연 획득한 뒤 DWM 투명화, 보더리스, 항상 위와 클릭 통과를 적용한다.
 - 포커스와 디스플레이 구성이 바뀌면 창 속성을 다시 적용한다.
 - 종료할 때 초기 창 스타일과 항상 위 상태를 복원한다.
-- 런타임에 중앙의 청록색 불투명 이미지를 생성해 투명 배경과 렌더링 결과를 구분한다.
-- 불투명 검증 이미지 위에서는 창이 클릭을 받고 나머지 영역에서는 클릭이 아래 창으로 통과한다.
+- 1단계에서는 중앙의 청록색 불투명 이미지를 생성해 투명 배경과 렌더링 결과를 구분했다.
+- 4단계부터 임시 검증 이미지는 기본 비활성화하고 저장된 활성 프리셋 이미지를 표시한다.
 - 실제 캐릭터 이미지의 알파 기반 클릭 판정은 개발 순서 5단계에서 구현한다.
 
 ## Unity Editor 절차
@@ -28,9 +28,11 @@
 1. `Custom Keyboard Reactor > Phase 0 > Configure Baseline`을 실행한다.
 2. Unity Test Runner에서 Edit Mode 테스트를 실행한다.
 3. `Custom Keyboard Reactor > Phase 0 > Build Windows 64-bit`을 실행한다.
-4. `Builds/Windows/CustomKeyboardReactor.exe`를 실행해 아래 1단계 수동 검증을 진행한다.
+4. `Builds/Windows/CustomKeyboardReactor.exe`를 실행해 현재 단계의 수동 검증을 진행한다.
 
-## 1단계 수동 검증
+## 1단계 완료 당시 수동 검증
+
+이 절차는 임시 검증 이미지가 기본 활성화되어 있던 1단계 완료 시점의 기록이다. 현재 빌드는 활성 프리셋 이미지를 표시한다.
 
 1. 바탕 화면에 클릭 결과를 확인할 수 있는 앱을 열어 둔다.
 2. 빌드를 실행하고 창 테두리와 불투명 배경 없이 중앙의 청록색 이미지만 보이는지 확인한다.
@@ -86,6 +88,33 @@
 4. `PresetRepositoryTests`에서 활성 프리셋, 공용 설정, 이미지 소유권, 초안 적용과 전체 입력 수의 재실행 복원을 확인한다.
 5. Windows 64비트 빌드를 실행해 플레이어 스크립트 컴파일과 패키징을 확인한다.
 
+## 4단계 반응 상태 머신과 이미지 표시
+
+- `ReactorStateMachine`이 반응, 대기와 설정 상태를 순수 C#으로 관리한다.
+- 반응 상태 입력은 다음 일반 이미지로 순환하고, 대기 상태 입력은 첫 일반 이미지로 복귀한다.
+- 대기 진입 시 직전 대기 이미지를 제외한 후보를 무작위로 선택한다.
+- `CharacterPresenter`는 저장된 이미지를 읽기 가능한 텍스처로 캐시하고 화면 중앙의 아래쪽 중앙 기준점에 표시한다.
+- 캐릭터 100%는 최대 320x320 UI 기준 픽셀이며, 최종 표시 영역은 현재 화면 짧은 변의 90%를 넘지 않는다.
+- 단계별 모니터 작업 영역과 저장 위치 적용은 5단계에서 연결한다.
+
+## 4단계 자동 검증
+
+1. 명령줄 절차의 Edit Mode 테스트를 실행한다.
+2. `ReactorStateMachineTests`에서 일반 이미지 순환, 대기 진입과 복귀, 직전 대기 이미지 제외, 설정 상태 정지와 환산 루프 수를 확인한다.
+3. `CharacterScaleCalculatorTests`에서 5% 크기 단계, 10~300% 범위와 화면 90% 제한을 확인한다.
+4. `CharacterPresenterTests`에서 Canvas와 캐릭터 이미지의 아래쪽 중앙 기준점을 확인한다.
+5. Windows 64비트 빌드를 실행해 런타임 어셈블리와 UGUI 패키징을 확인한다.
+
+## 4단계 수동 검증
+
+1. 일반 이미지가 두 장 이상이고 대기 이미지가 한 장 이상인 저장 프리셋을 준비한다.
+2. 플레이어 시작 직후 첫 일반 이미지가 화면 중앙에 표시되는지 확인한다.
+3. 다른 앱에 포커스를 둔 채 키보드와 마우스 버튼을 눌러 입력마다 일반 이미지가 순환하는지 확인한다.
+4. 대기 제한 시간 동안 입력하지 않아 대기 이미지로 전환되는지 확인한다.
+5. 대기 상태에서 첫 입력 후 첫 일반 이미지로 복귀하는지 확인한다.
+6. 캐릭터 크기를 바꾼 프리셋에서 이미지 비율과 아래쪽 중앙 기준점이 유지되는지 확인한다.
+7. 플레이어를 정상 종료하고 로그에 처리되지 않은 예외가 없는지 확인한다.
+
 ## 명령줄 절차
 
 저장소 루트의 PowerShell에서 다음 명령을 실행한다. Unity 설치 경로가 다르면 `$unityEditor` 값만 바꾼다.
@@ -108,6 +137,7 @@ New-Item -ItemType Directory -Path "$projectPath\TestResults" -Force | Out-Null
 $testArguments = @( # Edit Mode 테스트 인자
   "-batchmode",
   "-projectPath", "`"$projectPath`"",
+  "-executeMethod", "BreadPack.Mcp.Unity.McpServerBootstrap.StopServer",
   "-runTests",
   "-testPlatform", "EditMode",
   "-testResults", "`"$projectPath\TestResults\EditMode.xml`"",
@@ -117,4 +147,4 @@ $testProcess = Start-Process -FilePath $unityEditor -ArgumentList $testArguments
 if ($testProcess.ExitCode -ne 0) { throw "Edit Mode tests failed with exit code $($testProcess.ExitCode)." }
 ```
 
-두 명령의 종료 코드가 `0`이어야 하며, Unity Console과 로그에 컴파일 오류 또는 처리되지 않은 예외가 없어야 한다.
+배치 테스트에서는 Unity MCP의 TCP 서버를 먼저 정지해 테스트 종료와 서버 연결 정리가 경합하지 않게 한다. 두 명령의 종료 코드가 `0`이어야 하며, Unity Console과 로그에 컴파일 오류 또는 처리되지 않은 예외가 없어야 한다.

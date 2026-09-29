@@ -12,7 +12,7 @@ namespace CustomKeyboardReactor
         [SerializeField] private bool _alwaysOnTop = true; // 항상 위 초기 상태
         [SerializeField] private bool _initialClickThrough = true; // 클릭 통과 초기 상태
         [SerializeField, Min(0.01f)] private float _initializationRetrySeconds = 0.1f; // 창 초기화 재시도 간격
-        [SerializeField] private bool _showVerificationMarker = true; // 임시 검증 이미지 표시 여부
+        [SerializeField] private bool _showVerificationMarker; // 임시 검증 이미지 표시 여부
         [SerializeField] private Vector2 _verificationMarkerSize = new Vector2(2.5f, 2.5f); // 임시 검증 이미지 크기
         [SerializeField] private Color _verificationMarkerColor = new Color(0.1f, 0.75f, 0.95f, 1f); // 임시 검증 이미지 색상
 
