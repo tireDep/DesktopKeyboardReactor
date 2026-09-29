@@ -144,10 +144,11 @@ namespace CustomKeyboardReactor
         {
             try
             {
+                string dataRootPath = AppDataPathProvider.PrepareCurrentDataRootPath(); // 앱 데이터 루트 경로
                 PresetAssetStore presetAssetStore = new PresetAssetStore( // 프리셋 이미지 저장소
-                    Application.persistentDataPath);
+                    dataRootPath);
                 AppDataStore appDataStore = new AppDataStore( // 앱 데이터 저장소
-                    Application.persistentDataPath,
+                    dataRootPath,
                     presetAssetStore);
                 _userSettingsRepository = new UserSettingsRepository(appDataStore);
                 GlobalSettingsData settings = _userSettingsRepository.GetSettings(); // 저장된 공용 설정

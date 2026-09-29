@@ -108,9 +108,10 @@ namespace CustomKeyboardReactor
                 return;
             }
 
-            _presetAssetStore = new PresetAssetStore(Application.persistentDataPath);
+            string dataRootPath = AppDataPathProvider.PrepareCurrentDataRootPath(); // 앱 데이터 루트 경로
+            _presetAssetStore = new PresetAssetStore(dataRootPath);
             AppDataStore appDataStore = new AppDataStore( // 앱 데이터 저장소
-                Application.persistentDataPath,
+                dataRootPath,
                 _presetAssetStore);
             _presetRepository = new PresetRepository(appDataStore, _presetAssetStore);
             _userSettingsRepository = new UserSettingsRepository(appDataStore);
