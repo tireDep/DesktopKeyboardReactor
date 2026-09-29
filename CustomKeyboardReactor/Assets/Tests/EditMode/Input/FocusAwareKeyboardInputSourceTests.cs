@@ -18,14 +18,14 @@ namespace CustomKeyboardReactor.Tests.EditMode
                 focusedInputSource,
                 () => isApplicationFocused);
             inputSource.TryStart();
-            globalInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(100, 0));
-            focusedInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(200, 0));
+            globalInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(ActivityInputEvent.MouseButton.Left, 100, 0));
+            focusedInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(ActivityInputEvent.MouseButton.Left, 200, 0));
 
             bool focusedDequeued = inputSource.TryDequeue(out ActivityInputEvent focusedInput); // 내부 포커스 입력 반환 결과
             isApplicationFocused = false;
             bool staleGlobalDequeued = inputSource.TryDequeue(out _); // 이전 외부 포커스 입력 반환 결과
-            globalInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(300, 0));
-            focusedInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(400, 0));
+            globalInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(ActivityInputEvent.MouseButton.Left, 300, 0));
+            focusedInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(ActivityInputEvent.MouseButton.Left, 400, 0));
             bool globalDequeued = inputSource.TryDequeue(out ActivityInputEvent globalInput); // 외부 포커스 입력 반환 결과
             isApplicationFocused = true;
             bool staleFocusedDequeued = inputSource.TryDequeue(out _); // 이전 내부 포커스 입력 반환 결과

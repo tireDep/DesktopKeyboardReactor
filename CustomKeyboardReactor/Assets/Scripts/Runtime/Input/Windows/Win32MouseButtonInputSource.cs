@@ -152,9 +152,37 @@ namespace CustomKeyboardReactor
                 return;
             }
 
+            ActivityInputEvent.MouseButton button = ResolveMouseButton( // 입력된 마우스 버튼 종류
+                message,
+                hookData.MouseData);
             _pendingInputs.Enqueue(ActivityInputEvent.CreateMouseButton(
+                button,
                 hookData.Position.X,
                 hookData.Position.Y));
+        }
+
+        // Win32 메시지와 확장 버튼 정보에서 버튼 종류를 반환하는 함수
+        private static ActivityInputEvent.MouseButton ResolveMouseButton(uint message, uint mouseData)
+        {
+            if (message == LeftButtonDownMessage)
+            {
+                return ActivityInputEvent.MouseButton.Left;
+            }
+
+            if (message == RightButtonDownMessage)
+            {
+                return ActivityInputEvent.MouseButton.Right;
+            }
+
+            if (message == MiddleButtonDownMessage)
+            {
+                return ActivityInputEvent.MouseButton.Middle;
+            }
+
+            uint extraButton = mouseData >> 16; // 눌린 확장 버튼 번호
+            return extraButton == 1
+                ? ActivityInputEvent.MouseButton.X1
+                : ActivityInputEvent.MouseButton.X2;
         }
 
         // Win32 마우스 훅 API를 격리하는 클래스

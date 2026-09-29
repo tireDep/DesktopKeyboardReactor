@@ -18,6 +18,7 @@ namespace CustomKeyboardReactor
         private const long TopMostStyle = 0x00000008L; // 항상 위 확장 창 스타일
         private const uint NoSizeFlag = 0x0001; // 크기 유지 플래그
         private const uint NoMoveFlag = 0x0002; // 위치 유지 플래그
+        private const uint NoZOrderFlag = 0x0004; // 표시 순서 유지 플래그
         private const uint NoActivateFlag = 0x0010; // 비활성 유지 플래그
         private const uint FrameChangedFlag = 0x0020; // 창 프레임 갱신 플래그
         private const uint ShowWindowFlag = 0x0040; // 창 표시 플래그
@@ -28,7 +29,13 @@ namespace CustomKeyboardReactor
         private IntPtr _windowHandle; // Unity 플레이어 창 핸들
         private long _originalStyle; // 초기 기본 창 스타일
         private long _originalExtendedStyle; // 초기 확장 창 스타일
+        private NativeMethods.Rect _originalWindowRect; // 초기 창 위치와 크기
         private bool _hasOriginalStyles; // 초기 스타일 보관 여부
+        private int _requestedX; // 요청한 창 왼쪽 좌표
+        private int _requestedY; // 요청한 창 위쪽 좌표
+        private int _requestedWidth; // 요청한 창 너비
+        private int _requestedHeight; // 요청한 창 높이
+        private bool _hasRequestedBounds; // 요청 창 영역 보관 여부
 #endif
 
         public bool IsInitialized { get; private set; } // 창 초기화 완료 여부
@@ -119,20 +126,51 @@ namespace CustomKeyboardReactor
             return IsInitialized && ApplyClickThrough(clickThrough, false);
         }
 
-        // 현재 커서의 창 클라이언트 좌표를 조회하는 함수
-        public bool TryGetCursorClientPosition(out int x, out int y)
+        // 창을 선택한 모니터 작업 영역으로 이동하고 크기를 변경하는 함수
+        public bool SetWindowBounds(int x, int y, int width, int height)
         {
-            x = 0;
-            y = 0;
-
-#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            NativeMethods.Point point; // 현재 커서 화면 좌표
-            if (!IsInitialized || _windowHandle == IntPtr.Zero || !NativeMethods.GetCursorPos(out point))
+            if (!IsInitialized || width <= 0 || height <= 0)
             {
                 return false;
             }
 
-            if (!NativeMethods.ScreenToClient(_windowHandle, ref point))
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            if (_windowHandle == IntPtr.Zero ||
+                !NativeMethods.SetWindowPos(
+                    _windowHandle,
+                    IntPtr.Zero,
+                    x,
+                    y,
+                    width,
+                    height,
+                    NoZOrderFlag | NoActivateFlag | ShowWindowFlag))
+            {
+                return false;
+            }
+
+            _requestedX = x;
+            _requestedY = y;
+            _requestedWidth = width;
+            _requestedHeight = height;
+            _hasRequestedBounds = true;
+#endif
+            return true;
+        }
+
+        // Windows 화면 좌표를 현재 창의 클라이언트 좌표로 변환하는 함수
+        public bool TryScreenToClientPosition(int screenX, int screenY, out int x, out int y)
+        {
+            x = 0;
+            y = 0;
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            NativeMethods.Point point = new NativeMethods.Point // 변환할 화면 좌표
+            {
+                X = screenX,
+                Y = screenY,
+            };
+            if (!IsInitialized ||
+                _windowHandle == IntPtr.Zero ||
+                !NativeMethods.ScreenToClient(_windowHandle, ref point))
             {
                 return false;
             }
@@ -140,6 +178,24 @@ namespace CustomKeyboardReactor
             x = point.X;
             y = point.Y;
             return true;
+#else
+            return false;
+#endif
+        }
+
+        // 현재 커서의 창 클라이언트 좌표를 조회하는 함수
+        public bool TryGetCursorClientPosition(out int x, out int y)
+        {
+            x = 0;
+            y = 0;
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            NativeMethods.Point point; // 현재 커서 화면 좌표
+            if (!IsInitialized || _windowHandle == IntPtr.Zero || !NativeMethods.GetCursorPos(out point))
+            {
+                return false;
+            }
+
+            return TryScreenToClientPosition(point.X, point.Y, out x, out y);
 #else
             return false;
 #endif
@@ -156,9 +212,10 @@ namespace CustomKeyboardReactor
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             bool transparencyApplied = ApplyTransparency(); // DWM 투명 프레임 재적용 결과
             bool borderlessApplied = ApplyBorderlessStyle(); // 보더리스 스타일 재적용 결과
+            bool boundsApplied = !_hasRequestedBounds || ApplyRequestedBounds(); // 창 영역 재적용 결과
             bool alwaysOnTopApplied = ApplyAlwaysOnTop(IsAlwaysOnTop, true); // 항상 위 상태 재적용 결과
             bool clickThroughApplied = ApplyClickThrough(IsClickThrough, true); // 클릭 통과 상태 재적용 결과
-            return transparencyApplied && borderlessApplied && alwaysOnTopApplied && clickThroughApplied;
+            return transparencyApplied && borderlessApplied && boundsApplied && alwaysOnTopApplied && clickThroughApplied;
 #else
             return true;
 #endif
@@ -213,13 +270,16 @@ namespace CustomKeyboardReactor
                 _windowHandle,
                 ExtendedWindowStyleIndex,
                 out originalExtendedStyle);
-            if (!styleRead || !extendedStyleRead)
+            NativeMethods.Rect originalWindowRect; // 초기 창 위치와 크기
+            bool windowRectRead = NativeMethods.GetWindowRect(_windowHandle, out originalWindowRect); // 초기 창 영역 조회 결과
+            if (!styleRead || !extendedStyleRead || !windowRectRead)
             {
                 return false;
             }
 
             _originalStyle = originalStyle.ToInt64();
             _originalExtendedStyle = originalExtendedStyle.ToInt64();
+            _originalWindowRect = originalWindowRect;
             _hasOriginalStyles = true;
             return true;
         }
@@ -285,11 +345,11 @@ namespace CustomKeyboardReactor
             bool positionRestored = NativeMethods.SetWindowPos( // 창 위치와 프레임 복원 결과
                 _windowHandle,
                 originalWindowPosition,
-                0,
-                0,
-                0,
-                0,
-                NoSizeFlag | NoMoveFlag | NoActivateFlag | FrameChangedFlag);
+                _originalWindowRect.Left,
+                _originalWindowRect.Top,
+                _originalWindowRect.Right - _originalWindowRect.Left,
+                _originalWindowRect.Bottom - _originalWindowRect.Top,
+                NoActivateFlag | FrameChangedFlag);
 
             return transparencyRemoved && styleRestored && extendedStyleRestored && positionRestored;
         }
@@ -300,7 +360,22 @@ namespace CustomKeyboardReactor
             _windowHandle = IntPtr.Zero;
             _originalStyle = 0L;
             _originalExtendedStyle = 0L;
+            _originalWindowRect = default;
             _hasOriginalStyles = false;
+            _hasRequestedBounds = false;
+        }
+
+        // 보관한 창 영역을 다시 적용하는 함수
+        private bool ApplyRequestedBounds()
+        {
+            return NativeMethods.SetWindowPos(
+                _windowHandle,
+                IntPtr.Zero,
+                _requestedX,
+                _requestedY,
+                _requestedWidth,
+                _requestedHeight,
+                NoZOrderFlag | NoActivateFlag | ShowWindowFlag);
         }
 #endif
 
@@ -385,6 +460,16 @@ namespace CustomKeyboardReactor
                 public int BottomHeight; // 아래쪽 프레임 높이
             }
 
+            // Windows 창 영역을 보관하는 구조체
+            [StructLayout(LayoutKind.Sequential)]
+            internal struct Rect
+            {
+                public int Left; // 왼쪽 좌표
+                public int Top; // 위쪽 좌표
+                public int Right; // 오른쪽 좌표
+                public int Bottom; // 아래쪽 좌표
+            }
+
             // Windows 화면 또는 클라이언트 좌표를 보관하는 구조체
             [StructLayout(LayoutKind.Sequential)]
             internal struct Point
@@ -442,6 +527,11 @@ namespace CustomKeyboardReactor
             [DllImport("user32.dll", SetLastError = true)]
             [return: MarshalAs(UnmanagedType.Bool)]
             internal static extern bool ScreenToClient(IntPtr windowHandle, ref Point point);
+
+            // 현재 창의 화면 영역을 조회하는 함수
+            [DllImport("user32.dll", SetLastError = true)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static extern bool GetWindowRect(IntPtr windowHandle, out Rect rect);
 
             // 32비트 창 스타일을 조회하는 함수
             [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]

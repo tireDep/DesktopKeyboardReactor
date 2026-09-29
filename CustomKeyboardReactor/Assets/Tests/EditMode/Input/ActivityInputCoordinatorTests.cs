@@ -13,7 +13,7 @@ namespace CustomKeyboardReactor.Tests.EditMode
             FakeActivityInputSource keyboardInputSource = new FakeActivityInputSource(); // 키보드 반응 입력 공급자
             FakeActivityInputSource mouseButtonInputSource = new FakeActivityInputSource(); // 마우스 버튼 반응 입력 공급자
             keyboardInputSource.Enqueue(ActivityInputEvent.CreateKeyboard());
-            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(120, 240));
+            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(ActivityInputEvent.MouseButton.Left, 120, 240));
             ActivityInputCoordinator coordinator = new ActivityInputCoordinator( // 반응 입력 조정기
                 keyboardInputSource,
                 mouseButtonInputSource);
@@ -48,7 +48,7 @@ namespace CustomKeyboardReactor.Tests.EditMode
             FakeActivityInputSource keyboardInputSource = new FakeActivityInputSource(); // 키보드 반응 입력 공급자
             FakeActivityInputSource mouseButtonInputSource = new FakeActivityInputSource(); // 마우스 버튼 반응 입력 공급자
             keyboardInputSource.Enqueue(ActivityInputEvent.CreateKeyboard());
-            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(320, 180));
+            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(ActivityInputEvent.MouseButton.Left, 320, 180));
             ActivityInputCoordinator coordinator = new ActivityInputCoordinator( // 반응 입력 조정기
                 keyboardInputSource,
                 mouseButtonInputSource)
@@ -72,7 +72,7 @@ namespace CustomKeyboardReactor.Tests.EditMode
             FakeActivityInputSource keyboardInputSource = new FakeActivityInputSource(); // 키보드 반응 입력 공급자
             FakeActivityInputSource mouseButtonInputSource = new FakeActivityInputSource(); // 마우스 버튼 반응 입력 공급자
             keyboardInputSource.Enqueue(ActivityInputEvent.CreateKeyboard());
-            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(640, 360));
+            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(ActivityInputEvent.MouseButton.Left, 640, 360));
             ActivityInputCoordinator coordinator = new ActivityInputCoordinator( // 반응 입력 조정기
                 keyboardInputSource,
                 mouseButtonInputSource)
@@ -97,8 +97,8 @@ namespace CustomKeyboardReactor.Tests.EditMode
         {
             FakeActivityInputSource keyboardInputSource = new FakeActivityInputSource(); // 키보드 반응 입력 공급자
             FakeActivityInputSource mouseButtonInputSource = new FakeActivityInputSource(); // 마우스 버튼 반응 입력 공급자
-            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(100, 200));
-            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(300, 400));
+            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(ActivityInputEvent.MouseButton.Left, 100, 200));
+            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(ActivityInputEvent.MouseButton.Left, 300, 400));
             ActivityInputCoordinator coordinator = new ActivityInputCoordinator( // 반응 입력 조정기
                 keyboardInputSource,
                 mouseButtonInputSource);
@@ -117,7 +117,10 @@ namespace CustomKeyboardReactor.Tests.EditMode
             FakeActivityInputSource keyboardInputSource = new FakeActivityInputSource(); // 키보드 반응 입력 공급자
             FakeActivityInputSource mouseButtonInputSource = new FakeActivityInputSource(); // 마우스 버튼 반응 입력 공급자
             keyboardInputSource.Enqueue(ActivityInputEvent.CreateKeyboard());
-            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(512, 288));
+            mouseButtonInputSource.Enqueue(ActivityInputEvent.CreateMouseButton(
+                ActivityInputEvent.MouseButton.Right,
+                512,
+                288));
             ActivityInputCoordinator coordinator = new ActivityInputCoordinator( // 반응 입력 조정기
                 keyboardInputSource,
                 mouseButtonInputSource);
@@ -129,6 +132,7 @@ namespace CustomKeyboardReactor.Tests.EditMode
             Assert.That(acceptedInputs, Has.Count.EqualTo(2));
             Assert.That(acceptedInputs[0].HasScreenPosition, Is.False);
             Assert.That(acceptedInputs[1].HasScreenPosition, Is.True);
+            Assert.That(acceptedInputs[1].Button, Is.EqualTo(ActivityInputEvent.MouseButton.Right));
             Assert.That(acceptedInputs[1].ScreenX, Is.EqualTo(512));
             Assert.That(acceptedInputs[1].ScreenY, Is.EqualTo(288));
         }

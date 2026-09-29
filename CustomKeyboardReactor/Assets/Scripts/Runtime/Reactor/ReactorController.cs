@@ -17,6 +17,7 @@ namespace CustomKeyboardReactor
         private ActivityInputController _activityInputController; // 반응 입력 컨트롤러
         private ReactorStateMachine _stateMachine; // 반응 상태 머신
         private CharacterPresenter _characterPresenter; // 캐릭터 표시기
+        private CharacterInteractionController _characterInteractionController; // 캐릭터 상호작용 컨트롤러
         private PresetData _activePreset; // 활성 프리셋
         private GlobalSettingsData _globalSettings; // 공용 설정
         private Coroutine _runtimeCoroutine; // 런타임 상태 처리 코루틴
@@ -125,6 +126,14 @@ namespace CustomKeyboardReactor
             _characterPresenter = gameObject.GetComponent<CharacterPresenter>() ??
                                   gameObject.AddComponent<CharacterPresenter>();
             _characterPresenter.Initialize(_presetAssetStore);
+            _characterInteractionController = gameObject.GetComponent<CharacterInteractionController>() ??
+                                              gameObject.AddComponent<CharacterInteractionController>();
+            _characterInteractionController.Initialize(
+                _characterPresenter,
+                _globalSettings,
+                _userSettingsRepository,
+                OpenSettings,
+                CloseSettings);
             PresentCurrentImage();
         }
 
@@ -144,6 +153,8 @@ namespace CustomKeyboardReactor
 
             _activityInputController = inputController;
             _activityInputController.ActivityAccepted += HandleActivityAccepted;
+            _activityInputController.SetMouseInputExclusion(
+                _characterInteractionController.ShouldExcludeMouseInput);
             _activityInputController.IsConfiguring = _stateMachine.CurrentState == ReactorState.Configuring;
         }
 
@@ -195,6 +206,7 @@ namespace CustomKeyboardReactor
 
             if (_activityInputController != null)
             {
+                _activityInputController.SetMouseInputExclusion(null);
                 _activityInputController.ActivityAccepted -= HandleActivityAccepted;
                 _activityInputController = null;
             }

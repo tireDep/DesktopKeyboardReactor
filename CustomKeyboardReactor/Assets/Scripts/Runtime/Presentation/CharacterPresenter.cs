@@ -22,6 +22,7 @@ namespace CustomKeyboardReactor
         private RectTransform _characterRect; // 캐릭터 이미지 영역
         private RawImage _characterImage; // 캐릭터 이미지 표시기
         private int _currentScalePercent = PresetData.DefaultCharacterScalePercent; // 현재 캐릭터 크기
+        private Vector2 _normalizedAnchorPosition = new Vector2(0.5f, 0.5f); // 정규화된 아래쪽 중앙 기준점
         private int _lastScreenWidth; // 마지막 화면 너비
         private int _lastScreenHeight; // 마지막 화면 높이
 
@@ -29,6 +30,12 @@ namespace CustomKeyboardReactor
             ? _characterImage.texture as Texture2D
             : null; // 현재 표시 텍스처
         public RectTransform CharacterRect => _characterRect; // 현재 캐릭터 이미지 영역
+        public RectTransform DisplayAreaRect => _displayArea; // 공통 캐릭터 표시 영역
+        public Vector2 NormalizedAnchorPosition => _normalizedAnchorPosition; // 현재 정규화 기준점
+        public Vector2 ScreenAnchorPosition => _displayArea == null
+            ? Vector2.zero
+            : new Vector2(Screen.width * 0.5f, Screen.height * 0.5f) +
+              _displayArea.anchoredPosition; // 현재 화면 기준점
 
         // 캔버스 렌더링 전 화면 크기 변경 감지를 시작하는 함수
         private void OnEnable()
@@ -68,6 +75,31 @@ namespace CustomKeyboardReactor
             _characterImage.texture = GetOrLoadTexture(image);
             _characterImage.enabled = true;
             RefreshLayout();
+        }
+
+        // 저장된 정규화 기준점을 현재 화면에 적용하는 함수
+        public void SetNormalizedAnchorPosition(Vector2 normalizedPosition)
+        {
+            _normalizedAnchorPosition = new Vector2(
+                Mathf.Clamp01(normalizedPosition.x),
+                Mathf.Clamp01(normalizedPosition.y));
+            ApplyAnchorPosition();
+        }
+
+        // 드래그 화면 좌표를 보정하고 정규화 기준점으로 반영하는 함수
+        public void SetScreenAnchorPosition(Vector2 screenAnchorPosition)
+        {
+            if (_displayArea == null)
+            {
+                return;
+            }
+
+            Rect viewport = new Rect(0f, 0f, Screen.width, Screen.height); // 현재 창의 표시 영역
+            _normalizedAnchorPosition = CharacterPlacementCalculator.CalculateNormalizedPosition(
+                screenAnchorPosition,
+                viewport,
+                _displayArea.sizeDelta);
+            ApplyAnchorPosition();
         }
 
         // 프리셋 변경 시 이전 런타임 텍스처 캐시를 정리하는 함수
@@ -159,6 +191,24 @@ namespace CustomKeyboardReactor
             _characterRect.sizeDelta = new Vector2(
                 texture.width * fitScale,
                 texture.height * fitScale);
+            ApplyAnchorPosition();
+        }
+
+        // 정규화 기준점을 현재 화면 크기의 캔버스 위치로 적용하는 함수
+        private void ApplyAnchorPosition()
+        {
+            if (_displayArea == null)
+            {
+                return;
+            }
+
+            Rect viewport = new Rect(0f, 0f, Screen.width, Screen.height); // 현재 창의 표시 영역
+            Vector2 screenAnchor = CharacterPlacementCalculator.CalculateScreenAnchor( // 보정된 화면 기준점
+                _normalizedAnchorPosition,
+                viewport,
+                _displayArea.sizeDelta);
+            _displayArea.anchoredPosition = screenAnchor -
+                                            new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
         }
 
         // 캔버스 렌더링 전 화면 크기가 달라졌으면 표시 영역을 갱신하는 함수

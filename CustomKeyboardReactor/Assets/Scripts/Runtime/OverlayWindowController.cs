@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
@@ -18,8 +19,12 @@ namespace CustomKeyboardReactor
 
         private OverlayWindowService _windowService; // 오버레이 창 서비스
         private OverlayVerificationMarker _verificationMarker; // 임시 검증 이미지 표시기
+        private Func<Vector2, bool> _pointerInteractionProbe; // 포인터 상호작용 판정 함수
         private Coroutine _initializationCoroutine; // 창 초기화 코루틴
         private Coroutine _reapplyCoroutine; // 창 속성 재적용 코루틴
+
+        public bool IsInitialized => _windowService != null && _windowService.IsInitialized; // 창 초기화 완료 여부
+        public event Action DisplaysUpdated; // 디스플레이 구성 변경 이벤트
 
         // 씬 로드 후 오버레이 컨트롤러를 생성하는 함수
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -58,23 +63,77 @@ namespace CustomKeyboardReactor
         // 커서 위치에 맞춰 클릭 통과 상태를 갱신하는 함수
         private void Update()
         {
-            if (_windowService == null || !_windowService.IsInitialized || _verificationMarker == null)
+            if (!TryGetCursorClientPosition(out int cursorX, out int cursorY))
             {
                 return;
             }
 
-            int cursorX; // 커서 클라이언트 가로 좌표
-            int cursorY; // 커서 클라이언트 세로 좌표
-            bool cursorPositionRead = _windowService.TryGetCursorClientPosition( // 커서 클라이언트 좌표 조회 결과
-                out cursorX,
-                out cursorY);
-            if (!cursorPositionRead)
+            Vector2 screenPosition = ConvertClientToUnityScreenPoint(cursorX, cursorY); // Unity 화면 좌표
+            bool isInteractive = _pointerInteractionProbe?.Invoke(screenPosition) ?? false; // 런타임 상호작용 여부
+            if (_verificationMarker != null)
             {
-                return;
+                isInteractive |= _verificationMarker.ContainsClientPoint(cursorX, cursorY);
             }
 
-            bool clickThrough = !_verificationMarker.ContainsClientPoint(cursorX, cursorY); // 적용할 클릭 통과 상태
-            _windowService.SetClickThrough(clickThrough);
+            _windowService.SetClickThrough(!isInteractive);
+        }
+
+        // 포인터 상호작용 영역 판정 함수를 연결하는 함수
+        public void SetPointerInteractionProbe(Func<Vector2, bool> pointerInteractionProbe)
+        {
+            _pointerInteractionProbe = pointerInteractionProbe;
+        }
+
+        // 현재 커서의 Unity 화면 좌표를 반환하는 함수
+        public bool TryGetCursorUnityScreenPosition(out Vector2 screenPosition)
+        {
+            screenPosition = Vector2.zero;
+            if (!TryGetCursorClientPosition(out int cursorX, out int cursorY))
+            {
+                return false;
+            }
+
+            screenPosition = ConvertClientToUnityScreenPoint(cursorX, cursorY);
+            return true;
+        }
+
+        // Windows 화면 좌표를 Unity 화면 좌표로 변환하는 함수
+        public bool TryConvertScreenToUnityPoint(
+            int screenX,
+            int screenY,
+            out Vector2 unityScreenPosition)
+        {
+            unityScreenPosition = Vector2.zero;
+            if (_windowService == null ||
+                !_windowService.TryScreenToClientPosition(
+                    screenX,
+                    screenY,
+                    out int clientX,
+                    out int clientY))
+            {
+                return false;
+            }
+
+            unityScreenPosition = ConvertClientToUnityScreenPoint(clientX, clientY);
+            return true;
+        }
+
+        // 오버레이 창을 지정한 Windows 작업 영역으로 이동하는 함수
+        public bool SetWindowBounds(RectInt workArea)
+        {
+            return _windowService != null &&
+                   _windowService.SetWindowBounds(
+                       workArea.x,
+                       workArea.y,
+                       workArea.width,
+                       workArea.height);
+        }
+
+        // 항상 위 설정을 현재 창에 적용하는 함수
+        public bool SetAlwaysOnTop(bool alwaysOnTop)
+        {
+            _alwaysOnTop = alwaysOnTop;
+            return _windowService != null && _windowService.SetAlwaysOnTop(alwaysOnTop);
         }
 
         // 포커스 복귀 시 창 속성을 다시 적용하는 함수
@@ -86,10 +145,11 @@ namespace CustomKeyboardReactor
             }
         }
 
-        // 디스플레이 변경 시 창 속성을 다시 적용하는 함수
+        // 디스플레이 변경 시 창 속성과 캐릭터 위치 갱신을 요청하는 함수
         private void HandleDisplaysUpdated()
         {
             RequestWindowPropertyReapply();
+            DisplaysUpdated?.Invoke();
         }
 
         // 창 핸들이 준비될 때까지 초기화를 재시도하는 함수
@@ -102,6 +162,22 @@ namespace CustomKeyboardReactor
             }
 
             _initializationCoroutine = null;
+        }
+
+        // 현재 커서의 창 클라이언트 좌표를 반환하는 함수
+        private bool TryGetCursorClientPosition(out int cursorX, out int cursorY)
+        {
+            cursorX = 0;
+            cursorY = 0;
+            return _windowService != null &&
+                   _windowService.IsInitialized &&
+                   _windowService.TryGetCursorClientPosition(out cursorX, out cursorY);
+        }
+
+        // 왼쪽 위 기준 클라이언트 좌표를 왼쪽 아래 기준 Unity 좌표로 변환하는 함수
+        private static Vector2 ConvertClientToUnityScreenPoint(int clientX, int clientY)
+        {
+            return new Vector2(clientX, Screen.height - 1 - clientY);
         }
 
         // 창 속성 재적용을 요청하는 함수
@@ -136,6 +212,8 @@ namespace CustomKeyboardReactor
         private void OnDisable()
         {
             Display.onDisplaysUpdated -= HandleDisplaysUpdated;
+            _pointerInteractionProbe = null;
+            DisplaysUpdated = null;
 
             if (_initializationCoroutine != null)
             {
