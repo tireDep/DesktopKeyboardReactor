@@ -136,6 +136,12 @@ namespace CustomKeyboardReactor
             return _windowService != null && _windowService.SetAlwaysOnTop(alwaysOnTop);
         }
 
+        // 현재 오버레이 창 속성 재적용을 요청하는 함수
+        public void RefreshWindowProperties()
+        {
+            RequestWindowPropertyReapply();
+        }
+
         // 포커스 복귀 시 창 속성을 다시 적용하는 함수
         private void OnApplicationFocus(bool hasFocus)
         {

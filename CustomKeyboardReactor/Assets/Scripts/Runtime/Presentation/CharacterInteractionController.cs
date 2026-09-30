@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -9,8 +10,12 @@ namespace CustomKeyboardReactor
     [DisallowMultipleComponent]
     public sealed class CharacterInteractionController : MonoBehaviour
     {
+        private const int MonitorTransitionMaximumFrames = 60; // 모니터 전환 최대 대기 프레임 수
+        private const int WindowBoundsReapplyFrame = 3; // 창 영역 재적용 프레임
+
         private readonly PointerHitTester _pointerHitTester = new PointerHitTester(); // 픽셀 상호작용 판정기
         private readonly WindowsMonitorService _monitorService = new WindowsMonitorService(); // 모니터 작업 영역 서비스
+        private readonly MonitorTransitionLayout _monitorTransitionLayout = new MonitorTransitionLayout(); // 모니터 전환 배치 계산기
 
         private CharacterPresenter _presenter; // 캐릭터 표시기
         private GlobalSettingsData _settings; // 공용 설정
@@ -19,6 +24,7 @@ namespace CustomKeyboardReactor
         private OverlayContextMenuController _contextMenu; // 우클릭 메뉴
         private Action _openSettings; // 설정 상태 진입 함수
         private Action _closeSettings; // 설정 상태 종료 함수
+        private Coroutine _monitorTransitionCoroutine; // 모니터 전환 처리 코루틴
         private bool _monitorApplied; // 모니터 작업 영역 적용 여부
         private bool _isDragging; // 캐릭터 드래그 진행 여부
         private Vector2 _dragAnchorOffset; // 포인터와 캐릭터 기준점 간격
@@ -53,7 +59,10 @@ namespace CustomKeyboardReactor
             }
 
             TryConnectOverlayWindow();
-            TryApplySelectedMonitor();
+            if (_monitorTransitionCoroutine == null)
+            {
+                TryApplySelectedMonitor();
+            }
 
             Mouse mouse = Mouse.current; // 현재 Unity 마우스 장치
             if (mouse == null || !TryGetPointerPosition(out Vector2 pointerPosition))
@@ -237,11 +246,111 @@ namespace CustomKeyboardReactor
 
             int currentIndex = FindCurrentMonitorIndex(monitors); // 현재 모니터 인덱스
             int nextIndex = (currentIndex + 1) % monitors.Count; // 다음 모니터 인덱스
-            _settings.MonitorDeviceId = monitors[nextIndex].DeviceId;
-            _monitorApplied = false;
-            TryApplySelectedMonitor();
-            _contextMenu.Refresh(_settings.PositionLocked, nextIndex, monitors.Count);
+            bool restoreMenu = _contextMenu.IsOpen; // 전환 후 메뉴 복원 여부
+            string fallbackMonitorDeviceId = monitors[currentIndex].DeviceId; // 전환 실패 시 복구 모니터 ID
+            WindowsMonitorService.MonitorWorkArea nextMonitor = monitors[nextIndex]; // 다음 모니터 작업 영역
+            _monitorTransitionLayout.Begin(
+                _contextMenu.ScreenPosition,
+                _presenter.ScreenAnchorPosition,
+                nextMonitor.WorkArea);
+            _settings.MonitorDeviceId = nextMonitor.DeviceId;
+
+            if (_monitorTransitionCoroutine != null)
+            {
+                StopCoroutine(_monitorTransitionCoroutine);
+            }
+
+            _monitorTransitionCoroutine = StartCoroutine(ApplyMonitorTransition(
+                nextMonitor.WorkArea,
+                nextIndex,
+                monitors.Count,
+                restoreMenu,
+                fallbackMonitorDeviceId,
+                currentIndex));
             SaveSettings();
+        }
+
+        // 새 모니터의 화면 크기가 안정된 뒤 캐릭터와 메뉴를 다시 배치하는 함수
+        private IEnumerator ApplyMonitorTransition(
+            RectInt targetWorkArea,
+            int monitorIndex,
+            int monitorCount,
+            bool restoreMenu,
+            string fallbackMonitorDeviceId,
+            int fallbackMonitorIndex)
+        {
+            _contextMenu.Hide();
+            _monitorApplied = false;
+
+            int applyFrameCount = 0; // 창 영역 적용 대기 프레임 수
+            while (!_monitorApplied && applyFrameCount < MonitorTransitionMaximumFrames)
+            {
+                TryApplySelectedMonitor();
+                if (_monitorApplied)
+                {
+                    break;
+                }
+
+                applyFrameCount++;
+                yield return null;
+            }
+
+            if (!_monitorApplied)
+            {
+                _settings.MonitorDeviceId = fallbackMonitorDeviceId;
+                TryApplySelectedMonitor();
+                Canvas.ForceUpdateCanvases();
+                if (restoreMenu)
+                {
+                    _contextMenu.Show(
+                        _monitorTransitionLayout.CalculateMenuScreenPosition(
+                            _presenter.ScreenAnchorPosition),
+                        _settings.PositionLocked,
+                        fallbackMonitorIndex,
+                        monitorCount);
+                }
+
+                SaveSettings();
+                _monitorTransitionCoroutine = null;
+                yield break;
+            }
+
+            int resizeFrameCount = 0; // 화면 크기 안정 대기 프레임 수
+            bool viewportReady = false; // 대상 화면 크기 안정 여부
+            while (_monitorApplied &&
+                   !viewportReady &&
+                   resizeFrameCount < MonitorTransitionMaximumFrames)
+            {
+                yield return null;
+                resizeFrameCount++;
+                if (resizeFrameCount == WindowBoundsReapplyFrame)
+                {
+                    _overlayWindowController.SetWindowBounds(targetWorkArea);
+                }
+
+                viewportReady = _monitorTransitionLayout.IsViewportReady(
+                    new Vector2Int(Screen.width, Screen.height));
+            }
+
+            Canvas.ForceUpdateCanvases();
+            _presenter.SetNormalizedAnchorPosition(_settings.NormalizedAnchorPosition);
+            Canvas.ForceUpdateCanvases();
+            _overlayWindowController.RefreshWindowProperties();
+            _monitorApplied = true;
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+
+            if (restoreMenu)
+            {
+                _contextMenu.Show(
+                    _monitorTransitionLayout.CalculateMenuScreenPosition(
+                        _presenter.ScreenAnchorPosition),
+                    _settings.PositionLocked,
+                    monitorIndex,
+                    monitorCount);
+            }
+
+            _monitorTransitionCoroutine = null;
         }
 
         // 현재 저장된 장치 ID의 모니터 인덱스를 반환하는 함수
@@ -328,6 +437,12 @@ namespace CustomKeyboardReactor
         // 오버레이 연결과 메뉴 자원을 정리하는 함수
         private void OnDisable()
         {
+            if (_monitorTransitionCoroutine != null)
+            {
+                StopCoroutine(_monitorTransitionCoroutine);
+                _monitorTransitionCoroutine = null;
+            }
+
             if (_overlayWindowController != null)
             {
                 _overlayWindowController.SetPointerInteractionProbe(null);

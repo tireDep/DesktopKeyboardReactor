@@ -33,6 +33,9 @@ namespace CustomKeyboardReactor
 
         public bool IsOpen => _panelRect != null && _panelRect.gameObject.activeSelf; // 메뉴 표시 여부
         public RectTransform PanelRect => _panelRect; // 메뉴 패널 영역
+        public Vector2 ScreenPosition => _panelRect != null
+            ? _panelRect.anchoredPosition
+            : Vector2.zero; // 메뉴 화면 위치
 
         // 메뉴 계층을 생성하는 생성자
         public OverlayContextMenuController(Transform parent)
@@ -55,6 +58,12 @@ namespace CustomKeyboardReactor
             Refresh(positionLocked, monitorIndex, monitorCount);
             _panelRect.gameObject.SetActive(true);
 
+            SetScreenPosition(screenPosition);
+        }
+
+        // 화면 경계 안으로 보정하여 메뉴 위치를 변경하는 함수
+        public void SetScreenPosition(Vector2 screenPosition)
+        {
             float menuHeight = RowHeight * _rowRects.Count; // 전체 메뉴 높이
             float x = Mathf.Clamp(screenPosition.x, 0f, Mathf.Max(0f, Screen.width - MenuWidth)); // 보정 메뉴 가로 위치
             float y = Mathf.Clamp(screenPosition.y, menuHeight, Screen.height); // 보정 메뉴 세로 위치
