@@ -293,6 +293,7 @@ namespace CustomKeyboardReactor
             bool restoreMenu = _contextMenu.IsOpen; // 전환 후 메뉴 복원 여부
             string fallbackMonitorDeviceId = monitors[currentIndex].DeviceId; // 전환 실패 시 복구 모니터 ID
             WindowsMonitorService.MonitorWorkArea nextMonitor = monitors[nextIndex]; // 다음 모니터 작업 영역
+            // 모니터 전환 전 캐릭터 기준 메뉴 상대 위치 보관
             _monitorTransitionLayout.Begin(
                 _contextMenu.ScreenPosition,
                 _presenter.ScreenAnchorPosition,
@@ -326,6 +327,7 @@ namespace CustomKeyboardReactor
             _contextMenu.Hide();
             _monitorApplied = false;
 
+            // Unity 디스플레이와 렌더링 상태 동기화
             AsyncOperation moveOperation =
                 _overlayWindowController.MoveMainWindowToDisplay(monitorIndex); // Unity 창 이동 작업
             int moveFrameCount = 0; // Unity 창 이동 대기 프레임 수
@@ -370,6 +372,7 @@ namespace CustomKeyboardReactor
                 yield break;
             }
 
+            // 대상 화면 크기 연속 일치 대기
             int resizeFrameCount = 0; // 화면 크기 안정 대기 프레임 수
             bool viewportReady = false; // 대상 화면 크기 안정 여부
             while (_monitorApplied &&
@@ -387,6 +390,7 @@ namespace CustomKeyboardReactor
                     new Vector2Int(Screen.width, Screen.height));
             }
 
+            // 안정된 Canvas 기준 캐릭터와 창 속성 재적용
             Canvas.ForceUpdateCanvases();
             _presenter.SetNormalizedAnchorPosition(_settings.NormalizedAnchorPosition);
             Canvas.ForceUpdateCanvases();

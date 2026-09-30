@@ -131,7 +131,7 @@ namespace CustomKeyboardReactor
                        workArea.height);
         }
 
-        // Unity 렌더링 경로를 통해 주 창을 대상 디스플레이로 이동하는 함수
+        // Unity 디스플레이와 렌더링 상태를 갱신하여 주 창을 이동하는 함수
         public AsyncOperation MoveMainWindowToDisplay(int displayIndex)
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
