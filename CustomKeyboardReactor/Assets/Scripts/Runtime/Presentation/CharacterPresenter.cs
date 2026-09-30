@@ -14,6 +14,8 @@ namespace CustomKeyboardReactor
         private const string CharacterImageObjectName = "Character Image"; // 캐릭터 이미지 오브젝트 이름
         private const string CanvasObjectName = "Character Canvas"; // 캐릭터 캔버스 오브젝트 이름
         private const int CanvasSortingOrder = 100; // 캐릭터 캔버스 정렬 순서
+        private static readonly Rect DefaultNormalizedVisibleBounds =
+            Rect.MinMaxRect(-0.5f, 0f, 0.5f, 1f); // 기본 정규화 상호작용 경계
 
         private readonly Dictionary<string, Texture2D> _textureCache = new Dictionary<string, Texture2D>(); // 런타임 텍스처 캐시
         private PresetAssetStore _presetAssetStore; // 프리셋 이미지 저장소
@@ -23,6 +25,7 @@ namespace CustomKeyboardReactor
         private RawImage _characterImage; // 캐릭터 이미지 표시기
         private int _currentScalePercent = PresetData.DefaultCharacterScalePercent; // 현재 캐릭터 크기
         private Vector2 _normalizedAnchorPosition = new Vector2(0.5f, 0.5f); // 정규화된 아래쪽 중앙 기준점
+        private Rect _normalizedVisibleBounds = DefaultNormalizedVisibleBounds; // 프리셋 정규화 상호작용 경계
         private int _lastScreenWidth; // 마지막 화면 너비
         private int _lastScreenHeight; // 마지막 화면 높이
 
@@ -32,6 +35,7 @@ namespace CustomKeyboardReactor
         public RectTransform CharacterRect => _characterRect; // 현재 캐릭터 이미지 영역
         public RectTransform DisplayAreaRect => _displayArea; // 공통 캐릭터 표시 영역
         public Vector2 NormalizedAnchorPosition => _normalizedAnchorPosition; // 현재 정규화 기준점
+        public Rect NormalizedVisibleBounds => _normalizedVisibleBounds; // 현재 프리셋 정규화 상호작용 경계
         public Vector2 ScreenAnchorPosition => _displayArea == null
             ? Vector2.zero
             : new Vector2(Screen.width * 0.5f, Screen.height * 0.5f) +
@@ -55,6 +59,29 @@ namespace CustomKeyboardReactor
             _presetAssetStore = presetAssetStore ??
                                 throw new ArgumentNullException(nameof(presetAssetStore));
             EnsureDisplayHierarchy();
+        }
+
+        // 활성 프리셋의 일반 및 대기 이미지 공통 상호작용 경계를 적용하는 함수
+        public void SetActivePreset(PresetData activePreset)
+        {
+            if (_presetAssetStore == null)
+            {
+                throw new InvalidOperationException("Character presenter is not initialized.");
+            }
+
+            if (activePreset == null)
+            {
+                throw new ArgumentNullException(nameof(activePreset));
+            }
+
+            Rect combinedBounds = default; // 프리셋 공통 상호작용 경계
+            bool hasVisibleBounds = false; // 상호작용 픽셀 존재 여부
+            IncludeVisibleBounds(activePreset.NormalImages, ref combinedBounds, ref hasVisibleBounds);
+            IncludeVisibleBounds(activePreset.IdleImages, ref combinedBounds, ref hasVisibleBounds);
+            _normalizedVisibleBounds = hasVisibleBounds
+                ? combinedBounds
+                : DefaultNormalizedVisibleBounds;
+            ApplyAnchorPosition();
         }
 
         // 지정한 프리셋 이미지를 현재 캐릭터 크기로 표시하는 함수
@@ -98,7 +125,7 @@ namespace CustomKeyboardReactor
             _normalizedAnchorPosition = CharacterPlacementCalculator.CalculateNormalizedPosition(
                 screenAnchorPosition,
                 viewport,
-                _displayArea.sizeDelta);
+                GetScreenVisibleBounds());
             ApplyAnchorPosition();
         }
 
@@ -206,7 +233,7 @@ namespace CustomKeyboardReactor
             Vector2 screenAnchor = CharacterPlacementCalculator.CalculateScreenAnchor( // 보정된 화면 기준점
                 _normalizedAnchorPosition,
                 viewport,
-                _displayArea.sizeDelta);
+                GetScreenVisibleBounds());
             _displayArea.anchoredPosition = screenAnchor -
                                             new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
         }
@@ -218,6 +245,66 @@ namespace CustomKeyboardReactor
             {
                 RefreshLayout();
             }
+        }
+
+        // 이미지 목록의 상호작용 경계를 프리셋 공통 경계에 포함하는 함수
+        private void IncludeVisibleBounds(
+            IReadOnlyList<ImageAssetData> images,
+            ref Rect combinedBounds,
+            ref bool hasVisibleBounds)
+        {
+            if (images == null)
+            {
+                return;
+            }
+
+            for (int index = 0; index < images.Count; index++)
+            {
+                ImageAssetData image = images[index]; // 경계를 계산할 프리셋 이미지
+                if (image == null)
+                {
+                    continue;
+                }
+
+                Texture2D texture = null; // 경계 계산용 런타임 텍스처
+                try
+                {
+                    texture = _presetAssetStore.LoadTexture(image);
+                    if (!CharacterPlacementCalculator.TryCalculateNormalizedVisibleBounds(
+                            texture.GetPixels32(),
+                            texture.width,
+                            texture.height,
+                            PointerHitTester.InteractiveAlphaThreshold,
+                            out Rect imageBounds))
+                    {
+                        continue;
+                    }
+
+                    combinedBounds = hasVisibleBounds
+                        ? Rect.MinMaxRect(
+                            Mathf.Min(combinedBounds.xMin, imageBounds.xMin),
+                            Mathf.Min(combinedBounds.yMin, imageBounds.yMin),
+                            Mathf.Max(combinedBounds.xMax, imageBounds.xMax),
+                            Mathf.Max(combinedBounds.yMax, imageBounds.yMax))
+                        : imageBounds;
+                    hasVisibleBounds = true;
+                }
+                finally
+                {
+                    DestroyTexture(texture);
+                }
+            }
+        }
+
+        // 정규화 상호작용 경계를 현재 표시 크기의 화면 경계로 변환하는 함수
+        private Rect GetScreenVisibleBounds()
+        {
+            Vector2 displayAreaSize = _displayArea.sizeDelta; // 현재 공통 표시 영역 크기
+            return Rect.MinMaxRect(
+                _normalizedVisibleBounds.xMin * displayAreaSize.x,
+                _normalizedVisibleBounds.yMin * displayAreaSize.y,
+                _normalizedVisibleBounds.xMax * displayAreaSize.x,
+                _normalizedVisibleBounds.yMax * displayAreaSize.y);
         }
 
         // 이미지 데이터에 해당하는 런타임 텍스처를 캐시에서 반환하는 함수

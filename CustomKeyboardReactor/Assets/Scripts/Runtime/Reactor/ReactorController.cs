@@ -93,6 +93,7 @@ namespace CustomKeyboardReactor
             _activePreset = activePreset;
             _stateMachine.ApplyPreset(activePreset);
             _characterPresenter.ClearCache();
+            _characterPresenter.SetActivePreset(_activePreset);
             if (_activityInputController != null)
             {
                 _activityInputController.IsConfiguring = false;
@@ -126,6 +127,7 @@ namespace CustomKeyboardReactor
             _characterPresenter = gameObject.GetComponent<CharacterPresenter>() ??
                                   gameObject.AddComponent<CharacterPresenter>();
             _characterPresenter.Initialize(_presetAssetStore);
+            _characterPresenter.SetActivePreset(_activePreset);
             _characterInteractionController = gameObject.GetComponent<CharacterInteractionController>() ??
                                               gameObject.AddComponent<CharacterInteractionController>();
             _characterInteractionController.Initialize(
