@@ -59,9 +59,9 @@ namespace CustomKeyboardReactor
             }
 
             TryConnectOverlayWindow();
-            if (_monitorTransitionCoroutine == null)
+            if (_monitorTransitionCoroutine == null && !_monitorApplied)
             {
-                TryApplySelectedMonitor();
+                StartSelectedMonitorTransition();
             }
 
             Mouse mouse = Mouse.current; // 현재 Unity 마우스 장치
@@ -191,6 +191,50 @@ namespace CustomKeyboardReactor
             }
         }
 
+        // 저장된 모니터로 Unity 주 창 이동과 작업 영역 적용을 시작하는 함수
+        private void StartSelectedMonitorTransition()
+        {
+            if (_overlayWindowController == null ||
+                !_overlayWindowController.IsInitialized)
+            {
+                return;
+            }
+
+            IReadOnlyList<WindowsMonitorService.MonitorWorkArea> monitors =
+                _monitorService.GetMonitors(); // 현재 모니터 목록
+            if (monitors.Count == 0)
+            {
+                return;
+            }
+
+            WindowsMonitorService.MonitorWorkArea selectedMonitor =
+                WindowsMonitorService.Resolve( // 저장 장치 또는 주 모니터
+                    _settings.MonitorDeviceId,
+                    monitors);
+            bool monitorChanged = !string.Equals( // 저장 장치 보정 여부
+                _settings.MonitorDeviceId,
+                selectedMonitor.DeviceId,
+                StringComparison.OrdinalIgnoreCase);
+            _settings.MonitorDeviceId = selectedMonitor.DeviceId;
+            int monitorIndex = FindCurrentMonitorIndex(monitors); // 적용할 모니터 인덱스
+            _monitorTransitionLayout.Begin(
+                _contextMenu.ScreenPosition,
+                _presenter.ScreenAnchorPosition,
+                selectedMonitor.WorkArea);
+            _monitorTransitionCoroutine = StartCoroutine(ApplyMonitorTransition(
+                selectedMonitor.WorkArea,
+                monitorIndex,
+                monitors.Count,
+                false,
+                selectedMonitor.DeviceId,
+                monitorIndex));
+
+            if (monitorChanged)
+            {
+                SaveSettings();
+            }
+        }
+
         // 우클릭 메뉴를 열고 반응 입력을 설정 상태로 전환하는 함수
         private void ShowContextMenu(Vector2 pointerPosition)
         {
@@ -281,6 +325,17 @@ namespace CustomKeyboardReactor
         {
             _contextMenu.Hide();
             _monitorApplied = false;
+
+            AsyncOperation moveOperation =
+                _overlayWindowController.MoveMainWindowToDisplay(monitorIndex); // Unity 창 이동 작업
+            int moveFrameCount = 0; // Unity 창 이동 대기 프레임 수
+            while (moveOperation != null &&
+                   !moveOperation.isDone &&
+                   moveFrameCount < MonitorTransitionMaximumFrames)
+            {
+                moveFrameCount++;
+                yield return null;
+            }
 
             int applyFrameCount = 0; // 창 영역 적용 대기 프레임 수
             while (!_monitorApplied && applyFrameCount < MonitorTransitionMaximumFrames)

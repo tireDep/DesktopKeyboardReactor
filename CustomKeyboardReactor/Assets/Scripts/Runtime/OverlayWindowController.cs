@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace CustomKeyboardReactor
@@ -19,6 +20,7 @@ namespace CustomKeyboardReactor
 
         private OverlayWindowService _windowService; // 오버레이 창 서비스
         private OverlayVerificationMarker _verificationMarker; // 임시 검증 이미지 표시기
+        private readonly List<DisplayInfo> _displayLayout = new List<DisplayInfo>(); // Unity 디스플레이 목록
         private Func<Vector2, bool> _pointerInteractionProbe; // 포인터 상호작용 판정 함수
         private Coroutine _initializationCoroutine; // 창 초기화 코루틴
         private Coroutine _reapplyCoroutine; // 창 속성 재적용 코루틴
@@ -127,6 +129,25 @@ namespace CustomKeyboardReactor
                        workArea.y,
                        workArea.width,
                        workArea.height);
+        }
+
+        // Unity 렌더링 경로를 통해 주 창을 대상 디스플레이로 이동하는 함수
+        public AsyncOperation MoveMainWindowToDisplay(int displayIndex)
+        {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            _displayLayout.Clear();
+            Screen.GetDisplayLayout(_displayLayout);
+            if (displayIndex < 0 || displayIndex >= _displayLayout.Count)
+            {
+                return null;
+            }
+
+            DisplayInfo targetDisplay = _displayLayout[displayIndex]; // 대상 Unity 디스플레이
+            Vector2Int targetPosition = targetDisplay.workArea.position; // 대상 작업 영역 상대 위치
+            return Screen.MoveMainWindowTo(targetDisplay, targetPosition);
+#else
+            return null;
+#endif
         }
 
         // 항상 위 설정을 현재 창에 적용하는 함수
