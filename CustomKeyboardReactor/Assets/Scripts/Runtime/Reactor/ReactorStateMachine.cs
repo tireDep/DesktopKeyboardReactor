@@ -14,6 +14,7 @@ namespace CustomKeyboardReactor
         private int _currentNormalImageIndex; // 현재 일반 이미지 인덱스
         private int _currentIdleImageIndex = -1; // 현재 대기 이미지 인덱스
         private int _previousIdleImageIndex = -1; // 직전 대기 이미지 인덱스
+        private ReactorState _stateBeforeConfiguring = ReactorState.Reacting; // 설정 진입 전 반응 상태
 
         // 활성 프리셋과 대기 설정을 연결하는 생성자
         public ReactorStateMachine(
@@ -95,13 +96,24 @@ namespace CustomKeyboardReactor
         // 설정 상태로 전환하여 반응과 대기 타이머를 정지하는 함수
         public void OpenSettings()
         {
+            if (CurrentState == ReactorState.Configuring)
+            {
+                return;
+            }
+
+            _stateBeforeConfiguring = CurrentState;
             CurrentState = ReactorState.Configuring;
         }
 
-        // 설정을 닫고 첫 일반 이미지의 반응 상태로 복귀하는 함수
+        // 설정을 닫고 진입 전 상태와 표시 이미지를 복원하는 함수
         public void CloseSettings()
         {
-            ResetToFirstNormalImage();
+            if (CurrentState != ReactorState.Configuring)
+            {
+                return;
+            }
+
+            CurrentState = _stateBeforeConfiguring;
         }
 
         // 새 활성 프리셋을 적용하고 첫 일반 이미지로 초기화하는 함수

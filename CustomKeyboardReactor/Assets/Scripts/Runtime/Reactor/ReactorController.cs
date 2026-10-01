@@ -65,7 +65,7 @@ namespace CustomKeyboardReactor
             }
         }
 
-        // 설정 화면을 닫고 현재 프리셋의 첫 일반 이미지로 복귀하는 함수
+        // 설정 화면을 닫고 진입 전 반응 상태와 표시 이미지를 복원하는 함수
         public void CloseSettings()
         {
             if (_stateMachine == null)

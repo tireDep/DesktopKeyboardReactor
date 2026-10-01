@@ -139,13 +139,15 @@ namespace CustomKeyboardReactor.Tests.EditMode
             Assert.That(stateMachine.CurrentImage, Is.SameAs(preset.NormalImages[0]));
         }
 
-        // 설정 상태에서 입력과 대기 시간이 반영되지 않는지 검증하는 함수
+        // 설정 상태에서 입력과 대기 시간이 정지하고 닫은 뒤 기존 반응 상태를 이어가는지 검증하는 함수
         [Test]
-        public void Configuring_PausesActivityAndIdleTimerUntilClosed()
+        public void CloseSettings_FromReacting_PreservesImageAndResumesIdleTimer()
         {
             PresetData preset = CreatePreset(2, 1); // 테스트 프리셋
             ReactorStateMachine stateMachine = new ReactorStateMachine(preset, true, 60d); // 반응 상태 머신
             stateMachine.HandleActivity();
+            stateMachine.AdvanceTime(50d);
+            ImageAssetData reactingImage = stateMachine.CurrentImage; // 설정 열기 전 일반 이미지
             stateMachine.OpenSettings();
 
             bool activityChanged = stateMachine.HandleActivity(); // 설정 중 입력 변경 여부
@@ -157,12 +159,15 @@ namespace CustomKeyboardReactor.Tests.EditMode
 
             stateMachine.CloseSettings();
             Assert.That(stateMachine.CurrentState, Is.EqualTo(ReactorState.Reacting));
-            Assert.That(stateMachine.CurrentNormalImageIndex, Is.Zero);
+            Assert.That(stateMachine.CurrentNormalImageIndex, Is.EqualTo(1));
+            Assert.That(stateMachine.CurrentImage, Is.SameAs(reactingImage));
+            Assert.That(stateMachine.AdvanceTime(10d), Is.True);
+            Assert.That(stateMachine.CurrentState, Is.EqualTo(ReactorState.Idle));
         }
 
-        // 대기 상태에서 설정을 열면 현재 표시 이미지를 유지하는지 검증하는 함수
+        // 대기 상태에서 설정을 열고 닫으면 현재 대기 이미지와 상태를 유지하는지 검증하는 함수
         [Test]
-        public void OpenSettings_FromIdle_PreservesDisplayedIdleImage()
+        public void CloseSettings_FromIdle_PreservesDisplayedIdleImageAndState()
         {
             PresetData preset = CreatePreset(2, 1); // 테스트 프리셋
             ReactorStateMachine stateMachine = new ReactorStateMachine(preset, true, 60d); // 반응 상태 머신
@@ -173,6 +178,29 @@ namespace CustomKeyboardReactor.Tests.EditMode
 
             Assert.That(stateMachine.CurrentState, Is.EqualTo(ReactorState.Configuring));
             Assert.That(stateMachine.CurrentImage, Is.SameAs(idleImage));
+
+            stateMachine.CloseSettings();
+
+            Assert.That(stateMachine.CurrentState, Is.EqualTo(ReactorState.Idle));
+            Assert.That(stateMachine.CurrentImage, Is.SameAs(idleImage));
+        }
+
+        // 설정 중 새 프리셋을 적용하면 첫 일반 이미지로 초기화되는지 검증하는 함수
+        [Test]
+        public void ApplyPreset_WhileConfiguring_ResetsToFirstNormalImage()
+        {
+            PresetData originalPreset = CreatePreset(2, 1); // 기존 테스트 프리셋
+            PresetData replacementPreset = CreatePreset(3, 1); // 변경할 테스트 프리셋
+            ReactorStateMachine stateMachine = new ReactorStateMachine(originalPreset, true, 60d); // 반응 상태 머신
+            stateMachine.HandleActivity();
+            stateMachine.OpenSettings();
+
+            stateMachine.ApplyPreset(replacementPreset);
+
+            Assert.That(stateMachine.CurrentState, Is.EqualTo(ReactorState.Reacting));
+            Assert.That(stateMachine.ActivePreset, Is.SameAs(replacementPreset));
+            Assert.That(stateMachine.CurrentNormalImageIndex, Is.Zero);
+            Assert.That(stateMachine.CurrentImage, Is.SameAs(replacementPreset.NormalImages[0]));
         }
 
         // 전체 입력 수를 현재 일반 이미지 수로 나눈 환산 루프 수를 검증하는 함수
