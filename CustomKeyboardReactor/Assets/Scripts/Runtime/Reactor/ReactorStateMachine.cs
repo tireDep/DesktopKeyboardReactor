@@ -133,9 +133,12 @@ namespace CustomKeyboardReactor
             _idleTimeoutSeconds = idleTimeoutSeconds;
             _reactingElapsedSeconds = 0d;
 
-            if (!idleEnabled && CurrentState == ReactorState.Idle)
+            if (!idleEnabled && (CurrentState == ReactorState.Idle ||
+                (CurrentState == ReactorState.Configuring && _stateBeforeConfiguring == ReactorState.Idle)))
             {
+                bool configuring = CurrentState == ReactorState.Configuring; // 설정 상태 유지 여부
                 ResetToFirstNormalImage();
+                if (configuring) OpenSettings();
             }
         }
 

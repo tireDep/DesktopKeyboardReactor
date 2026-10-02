@@ -3,7 +3,9 @@
   "rootNamespace": "CustomKeyboardReactor.Tests.EditMode",
   "references": [
     "CustomKeyboardReactor.Runtime",
-    "CustomKeyboardReactor.Editor"
+    "CustomKeyboardReactor.Editor",
+    "Unity.ugui",
+    "Unity.TextMeshPro"
   ],
   "includePlatforms": [
     "Editor"

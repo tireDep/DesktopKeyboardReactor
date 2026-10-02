@@ -38,6 +38,12 @@ namespace CustomKeyboardReactor
 
         public event Action<ActivityInputEvent> ActivityAccepted; // 유효한 반응 입력 전달 이벤트
 
+        // 전체 입력 수만 초기화하는 함수
+        public void ResetTotalInputCount()
+        {
+            TotalInputCount = 0L;
+        }
+
         // 자체 마우스 입력 판정 함수를 변경하는 함수
         public void SetMouseInputExclusion(Predicate<ActivityInputEvent> isMouseInputExcluded)
         {

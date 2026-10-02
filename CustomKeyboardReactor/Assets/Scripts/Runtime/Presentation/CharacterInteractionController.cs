@@ -22,12 +22,30 @@ namespace CustomKeyboardReactor
         private UserSettingsRepository _settingsRepository; // 공용 설정 저장소
         private OverlayWindowController _overlayWindowController; // 오버레이 창 컨트롤러
         private OverlayContextMenuController _contextMenu; // 우클릭 메뉴
+        private SettingsWindowController _settingsWindow; // 설정 화면
         private Action _openSettings; // 설정 상태 진입 함수
         private Action _closeSettings; // 설정 상태 종료 함수
         private Coroutine _monitorTransitionCoroutine; // 모니터 전환 처리 코루틴
         private bool _monitorApplied; // 모니터 작업 영역 적용 여부
         private bool _isDragging; // 캐릭터 드래그 진행 여부
         private Vector2 _dragAnchorOffset; // 포인터와 캐릭터 기준점 간격
+
+        // 설정 화면 진입과 포인터 판정 대상을 연결하는 함수
+        public void SetSettingsWindow(SettingsWindowController settingsWindow)
+        {
+            _settingsWindow = settingsWindow;
+            _contextMenu.SetUiScale(_settings.UiScalePercent);
+        }
+
+        // 공용 설정과 모니터 및 메뉴 배율을 갱신하는 함수
+        public void UpdateSettings(GlobalSettingsData settings)
+        {
+            bool monitorChanged = _settings.MonitorDeviceId != settings.MonitorDeviceId; // 표시 모니터 변경 여부
+            _settings = settings;
+            _contextMenu.SetUiScale(settings.UiScalePercent);
+            _overlayWindowController?.SetAlwaysOnTop(settings.AlwaysOnTop);
+            if (monitorChanged) _monitorApplied = false;
+        }
 
         // 상호작용에 필요한 표시기와 저장 계층을 연결하는 함수
         public void Initialize(
@@ -62,6 +80,12 @@ namespace CustomKeyboardReactor
             if (_monitorTransitionCoroutine == null && !_monitorApplied)
             {
                 StartSelectedMonitorTransition();
+            }
+
+            if (_settingsWindow != null && _settingsWindow.IsOpen)
+            {
+                _isDragging = false;
+                return;
             }
 
             Mouse mouse = Mouse.current; // 현재 Unity 마우스 장치
@@ -272,8 +296,12 @@ namespace CustomKeyboardReactor
                 case OverlayContextMenuController.Command.Close:
                     CloseContextMenu();
                     break;
+                case OverlayContextMenuController.Command.OpenSettings:
+                    _contextMenu.Hide();
+                    _settingsWindow.Show();
+                    break;
                 case OverlayContextMenuController.Command.Exit:
-                    Application.Quit();
+                    _settingsWindow.RequestExit();
                     break;
             }
         }
@@ -460,7 +488,8 @@ namespace CustomKeyboardReactor
         // 포인터가 캐릭터 또는 열린 메뉴의 상호작용 영역인지 반환하는 함수
         private bool IsPointerInteractive(Vector2 screenPosition)
         {
-            return _pointerHitTester.IsInteractive(
+            return (_settingsWindow != null && _settingsWindow.ContainsScreenPoint(screenPosition)) ||
+                   _pointerHitTester.IsInteractive(
                 screenPosition,
                 _presenter?.CharacterRect,
                 _presenter?.CurrentTexture,

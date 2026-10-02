@@ -251,7 +251,7 @@ namespace CustomKeyboardReactor
         }
 
         // 프리셋 데이터와 이미지 참조를 깊은 복사하는 함수
-        private static PresetData ClonePreset(PresetData source)
+        internal static PresetData ClonePreset(PresetData source)
         {
             if (source == null)
             {

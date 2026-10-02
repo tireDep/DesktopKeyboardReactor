@@ -19,6 +19,13 @@ namespace CustomKeyboardReactor
         public long TotalInputCount => _coordinator?.TotalInputCount ?? 0L; // 전체 입력 수
         public event Action<ActivityInputEvent> ActivityAccepted; // 승인된 반응 입력 전달 이벤트
 
+        // 저장 및 런타임 전체 입력 수를 초기화하는 함수
+        public void ResetTotalInputCount()
+        {
+            _userSettingsRepository?.SaveTotalInputCount(0L);
+            _coordinator?.ResetTotalInputCount();
+        }
+
         public bool KeyboardReactionEnabled // 키보드 반응 활성 여부
         {
             get => _keyboardReactionEnabled;

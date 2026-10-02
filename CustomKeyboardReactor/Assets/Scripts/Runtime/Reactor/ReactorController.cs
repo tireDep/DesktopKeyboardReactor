@@ -12,6 +12,8 @@ namespace CustomKeyboardReactor
         private const float RuntimePollIntervalSeconds = 0.1f; // 런타임 상태 확인 간격
 
         private PresetAssetStore _presetAssetStore; // 프리셋 이미지 저장소
+        private AppDataStore _appDataStore; // 앱 데이터 저장소
+        private SettingsWindowController _settingsWindowController; // 설정 화면 컨트롤러
         private PresetRepository _presetRepository; // 프리셋 저장소
         private UserSettingsRepository _userSettingsRepository; // 공용 설정 저장소
         private ActivityInputController _activityInputController; // 반응 입력 컨트롤러
@@ -23,6 +25,57 @@ namespace CustomKeyboardReactor
         private Coroutine _runtimeCoroutine; // 런타임 상태 처리 코루틴
 
         public ReactorState CurrentState => _stateMachine?.CurrentState ?? ReactorState.Reacting; // 현재 반응 상태
+        public long TotalInputCount => _activityInputController?.TotalInputCount ??
+            _userSettingsRepository.GetTotalInputCount(); // 현재 전체 입력 수
+
+        // 프리셋 초안을 활성 데이터 변경 없이 표시하는 함수
+        public void PreviewPreset(PresetData preset, ImageAssetData image)
+        {
+            _characterPresenter.ClearCache();
+            _characterPresenter.SetActivePreset(preset);
+            if (image != null) _characterPresenter.Present(image, preset.CharacterScalePercent);
+        }
+
+        // 활성 프리셋과 설정 진입 전 이미지를 다시 표시하는 함수
+        public void RestoreActivePreview()
+        {
+            _characterPresenter.ClearCache();
+            _characterPresenter.SetActivePreset(_activePreset);
+            _characterPresenter.SetNormalizedAnchorPosition(_globalSettings.NormalizedAnchorPosition);
+            PresentCurrentImage();
+        }
+
+        // 공용 설정을 입력과 표시 및 대기 계층에 반영하는 함수
+        public void UpdateGlobalSettings(GlobalSettingsData settings)
+        {
+            if (_globalSettings.IdleEnabled != settings.IdleEnabled ||
+                _globalSettings.IdleTimeoutSeconds != settings.IdleTimeoutSeconds)
+                _stateMachine.SetIdleSettings(settings.IdleEnabled, settings.IdleTimeoutSeconds);
+            _globalSettings = settings;
+            if (_activityInputController != null)
+            {
+                _activityInputController.KeyboardReactionEnabled = settings.KeyboardReactionEnabled;
+                _activityInputController.MouseButtonReactionEnabled = settings.MouseReactionEnabled;
+            }
+            _characterInteractionController.UpdateSettings(settings);
+        }
+
+        // 전체 입력 수를 초기화하는 함수
+        public void ResetInputCount()
+        {
+            if (_activityInputController != null) _activityInputController.ResetTotalInputCount();
+            else _userSettingsRepository.SaveTotalInputCount(0);
+        }
+
+        // 앱 데이터를 기본 원본으로 초기화하고 런타임에 반영하는 함수
+        public void ResetAllData()
+        {
+            _appDataStore.ResetAllData();
+            ResetInputCount();
+            UpdateGlobalSettings(_userSettingsRepository.GetSettings());
+            ApplyPreset(_presetRepository.GetActive());
+            OpenSettings();
+        }
 
         // 씬 로드 후 반응 컨트롤러를 생성하는 함수
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -90,13 +143,15 @@ namespace CustomKeyboardReactor
                 throw new ArgumentNullException(nameof(activePreset));
             }
 
+            bool configuring = _stateMachine.CurrentState == ReactorState.Configuring; // 설정 상태 유지 여부
             _activePreset = activePreset;
             _stateMachine.ApplyPreset(activePreset);
+            if (configuring) _stateMachine.OpenSettings();
             _characterPresenter.ClearCache();
             _characterPresenter.SetActivePreset(_activePreset);
             if (_activityInputController != null)
             {
-                _activityInputController.IsConfiguring = false;
+                _activityInputController.IsConfiguring = configuring;
             }
 
             PresentCurrentImage();
@@ -112,11 +167,11 @@ namespace CustomKeyboardReactor
 
             string dataRootPath = AppDataPathProvider.PrepareCurrentDataRootPath(); // 앱 데이터 루트 경로
             _presetAssetStore = new PresetAssetStore(dataRootPath);
-            AppDataStore appDataStore = new AppDataStore( // 앱 데이터 저장소
+            _appDataStore = new AppDataStore(
                 dataRootPath,
                 _presetAssetStore);
-            _presetRepository = new PresetRepository(appDataStore, _presetAssetStore);
-            _userSettingsRepository = new UserSettingsRepository(appDataStore);
+            _presetRepository = new PresetRepository(_appDataStore, _presetAssetStore);
+            _userSettingsRepository = new UserSettingsRepository(_appDataStore);
             _activePreset = _presetRepository.GetActive();
             _globalSettings = _userSettingsRepository.GetSettings();
             _stateMachine = new ReactorStateMachine(
@@ -136,6 +191,10 @@ namespace CustomKeyboardReactor
                 _userSettingsRepository,
                 OpenSettings,
                 CloseSettings);
+            _settingsWindowController = gameObject.GetComponent<SettingsWindowController>() ??
+                gameObject.AddComponent<SettingsWindowController>();
+            _settingsWindowController.Initialize(this, _presetRepository, _presetAssetStore, _userSettingsRepository);
+            _characterInteractionController.SetSettingsWindow(_settingsWindowController);
             PresentCurrentImage();
         }
 
@@ -154,6 +213,8 @@ namespace CustomKeyboardReactor
             }
 
             _activityInputController = inputController;
+            _activityInputController.KeyboardReactionEnabled = _globalSettings.KeyboardReactionEnabled;
+            _activityInputController.MouseButtonReactionEnabled = _globalSettings.MouseReactionEnabled;
             _activityInputController.ActivityAccepted += HandleActivityAccepted;
             _activityInputController.SetMouseInputExclusion(
                 _characterInteractionController.ShouldExcludeMouseInput);

@@ -145,6 +145,24 @@ namespace CustomKeyboardReactor
             }
         }
 
+        // 기본 프리셋을 제외한 소유 이미지와 남은 초안을 초기화하는 함수
+        public void ResetOwnedAssets(string retainedPresetId)
+        {
+            ValidatePresetId(retainedPresetId);
+            string presetRoot = Path.Combine(_dataRootPath, PresetsDirectoryName); // 제품 소유 프리셋 루트
+            if (Directory.Exists(presetRoot))
+            {
+                foreach (string directory in Directory.GetDirectories(presetRoot)) // 제품 소유 프리셋 폴더
+                {
+                    if (string.Equals(Path.GetFileName(directory), retainedPresetId, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    Directory.Delete(directory, true);
+                }
+            }
+            string draftRoot = Path.Combine(_dataRootPath, DraftsDirectoryName); // 제품 소유 초안 루트
+            if (Directory.Exists(draftRoot)) Directory.Delete(draftRoot, true);
+        }
+
         // 저장된 이미지를 CPU에서 읽을 수 있는 런타임 텍스처로 불러오는 함수
         public Texture2D LoadTexture(ImageAssetData image)
         {

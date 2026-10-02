@@ -20,6 +20,7 @@ namespace CustomKeyboardReactor
         private RectTransform _panelRect; // 메뉴 패널 영역
         private Font _menuFont; // 메뉴 동적 글꼴
         private bool _ownsMenuFont; // 메뉴 글꼴 소유 여부
+        private float _uiScale = 1f; // 메뉴 UI 배율
 
         // 메뉴에서 실행 가능한 명령
         public enum Command
@@ -27,6 +28,7 @@ namespace CustomKeyboardReactor
             None,
             TogglePositionLock,
             SelectNextMonitor,
+            OpenSettings,
             Close,
             Exit,
         }
@@ -34,7 +36,7 @@ namespace CustomKeyboardReactor
         public bool IsOpen => _panelRect != null && _panelRect.gameObject.activeSelf; // 메뉴 표시 여부
         public RectTransform PanelRect => _panelRect; // 메뉴 패널 영역
         public Vector2 ScreenPosition => _panelRect != null
-            ? _panelRect.anchoredPosition
+            ? (Vector2)_panelRect.position
             : Vector2.zero; // 메뉴 화면 위치
 
         // 메뉴 계층을 생성하는 생성자
@@ -64,10 +66,19 @@ namespace CustomKeyboardReactor
         // 화면 경계 안으로 보정하여 메뉴 위치를 변경하는 함수
         public void SetScreenPosition(Vector2 screenPosition)
         {
-            float menuHeight = RowHeight * _rowRects.Count; // 전체 메뉴 높이
-            float x = Mathf.Clamp(screenPosition.x, 0f, Mathf.Max(0f, Screen.width - MenuWidth)); // 보정 메뉴 가로 위치
+            float menuHeight = RowHeight * _rowRects.Count * _uiScale; // 전체 메뉴 높이
+            float x = Mathf.Clamp(screenPosition.x, 0f, Mathf.Max(0f, Screen.width - MenuWidth * _uiScale)); // 보정 메뉴 가로 위치
             float y = Mathf.Clamp(screenPosition.y, menuHeight, Screen.height); // 보정 메뉴 세로 위치
-            _panelRect.anchoredPosition = new Vector2(x, y);
+            _panelRect.anchoredPosition = new Vector2(x, y) / _uiScale;
+        }
+
+        // 캐릭터 크기와 독립적인 메뉴 UI 배율을 적용하는 함수
+        public void SetUiScale(int percent)
+        {
+            Vector2 screenPosition = ScreenPosition; // 배율 변경 전 메뉴 좌표
+            _uiScale = percent / 100f;
+            _canvasObject.GetComponent<CanvasScaler>().scaleFactor = _uiScale;
+            SetScreenPosition(screenPosition);
         }
 
         // 현재 설정에 맞춰 메뉴 문구를 갱신하는 함수
@@ -77,8 +88,9 @@ namespace CustomKeyboardReactor
             _rowLabels[1].text = monitorCount > 1
                 ? $"모니터: {monitorIndex + 1}/{monitorCount}"
                 : "모니터: 1/1";
-            _rowLabels[2].text = "닫기";
-            _rowLabels[3].text = "종료";
+            _rowLabels[2].text = "설정 열기";
+            _rowLabels[3].text = "닫기";
+            _rowLabels[4].text = "종료";
         }
 
         // 메뉴를 숨기는 함수
@@ -122,7 +134,7 @@ namespace CustomKeyboardReactor
             return false;
         }
 
-        // 메뉴 캔버스와 네 개 명령 행을 생성하는 함수
+        // 메뉴 캔버스와 명령 행을 생성하는 함수
         private void CreateHierarchy(Transform parent)
         {
             _canvasObject = new GameObject(
@@ -148,7 +160,7 @@ namespace CustomKeyboardReactor
             _panelRect.anchorMin = Vector2.zero;
             _panelRect.anchorMax = Vector2.zero;
             _panelRect.pivot = new Vector2(0f, 1f);
-            _panelRect.sizeDelta = new Vector2(MenuWidth, RowHeight * 4f);
+            _panelRect.sizeDelta = new Vector2(MenuWidth, RowHeight * 5f);
             panelObject.GetComponent<Image>().color = new Color(0.08f, 0.09f, 0.11f, 0.96f);
 
             _menuFont = Font.CreateDynamicFontFromOSFont( // 한국어 우선 시스템 글꼴
@@ -156,7 +168,7 @@ namespace CustomKeyboardReactor
                 15);
             _ownsMenuFont = _menuFont != null;
             _menuFont ??= Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            for (int index = 0; index < 4; index++)
+            for (int index = 0; index < 5; index++)
             {
                 CreateRow(index, _menuFont);
             }

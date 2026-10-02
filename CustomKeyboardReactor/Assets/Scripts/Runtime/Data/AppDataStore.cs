@@ -122,6 +122,24 @@ namespace CustomKeyboardReactor
             }
         }
 
+        // 기본 데이터 저장 후 이전 프리셋 소유 파일을 제거하는 함수
+        public void ResetAllData()
+        {
+            LoadLatest();
+            AppData replacement = CreateDefaultData(); // 새 기본 앱 데이터
+            try
+            {
+                Save(replacement);
+            }
+            catch
+            {
+                _presetAssetStore.DeletePresetAssets(replacement.ActivePresetId);
+                throw;
+            }
+            _presetAssetStore.ResetOwnedAssets(replacement.ActivePresetId);
+            if (File.Exists(_backupFilePath)) File.Delete(_backupFilePath);
+        }
+
         // 현재 스키마의 기본 앱 데이터를 생성하는 함수
         private AppData CreateDefaultData()
         {

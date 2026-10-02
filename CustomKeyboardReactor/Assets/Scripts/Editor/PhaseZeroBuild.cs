@@ -19,6 +19,51 @@ namespace CustomKeyboardReactor.Editor.Build
         private const string SceneDirectory = "Assets/Scenes"; // 오버레이 씬 폴더 경로
         private const string WindowsBuildDirectory = "Builds/Windows"; // Windows 빌드 폴더 경로
 
+        // TMP 필수 리소스를 가져오고 런타임 글꼴 셰이더를 포함하는 함수
+        [MenuItem("Custom Keyboard Reactor/Settings/Prepare UI Resources")]
+        public static void PrepareUiResources()
+        {
+            if (File.Exists("Assets/TextMesh Pro/Resources/TMP Settings.asset"))
+            {
+                CompleteUiResources();
+                return;
+            }
+            UnityEditor.PackageManager.PackageInfo package =
+                UnityEditor.PackageManager.PackageInfo.FindForAssetPath("Packages/com.unity.ugui"); // UGUI 패키지 정보
+            AssetDatabase.importPackageCompleted += HandleUiResourcesImported;
+            AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath,
+                "Package Resources/TMP Essential Resources.unitypackage"), false);
+        }
+
+        // TMP 필수 리소스 가져오기 완료를 처리하는 함수
+        private static void HandleUiResourcesImported(string packageName)
+        {
+            if (packageName != "TMP Essential Resources") return;
+            AssetDatabase.importPackageCompleted -= HandleUiResourcesImported;
+            CompleteUiResources();
+        }
+
+        // 동적 TMP 글꼴 셰이더를 빌드에서 보존하는 함수
+        private static void CompleteUiResources()
+        {
+            Shader shader = Shader.Find("TextMeshPro/Mobile/Distance Field"); // 런타임 글꼴 셰이더
+            if (shader == null) throw new BuildFailedException("TMP UI shader was not imported.");
+            SerializedObject settings = new SerializedObject(
+                AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset")[0]); // 그래픽 설정
+            SerializedProperty shaders = settings.FindProperty("m_AlwaysIncludedShaders"); // 항상 포함할 셰이더 목록
+            bool exists = false; // 글꼴 셰이더 포함 여부
+            for (int index = 0; index < shaders.arraySize; index++) // 셰이더 목록 인덱스
+                exists |= shaders.GetArrayElementAtIndex(index).objectReferenceValue == shader;
+            if (!exists)
+            {
+                shaders.InsertArrayElementAtIndex(shaders.arraySize);
+                shaders.GetArrayElementAtIndex(shaders.arraySize - 1).objectReferenceValue = shader;
+                settings.ApplyModifiedPropertiesWithoutUndo();
+            }
+            AssetDatabase.SaveAssets();
+            if (Application.isBatchMode) EditorApplication.Exit(0);
+        }
+
         // 프로젝트 설정과 오버레이 씬을 구성하는 함수
         [MenuItem("Custom Keyboard Reactor/Phase 0/Configure Baseline")]
         public static void Configure()
