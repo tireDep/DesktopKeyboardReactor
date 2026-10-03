@@ -139,6 +139,60 @@ namespace CustomKeyboardReactor.Tests.EditMode
             Assert.That(_machine.CurrentIdleImageIndex, Is.EqualTo(-1));
         }
 
+        // 한 장짜리 프리셋의 입력과 카운트 초기화가 호버 문구를 갱신하는지 검증하는 함수
+        [Test]
+        public void SingleNormalImageActivityAndCountReset_RefreshHoverText()
+        {
+            ReactorController reactor = _runtime.GetComponent<ReactorController>(); // 테스트 런타임 연결기
+            PresetData active = _machine.ActivePreset; // 테스트 활성 프리셋
+            active.NormalImages.RemoveRange(1, active.NormalImages.Count - 1);
+            active.HoverTextTemplate = "{TOTAL_INPUT_COUNT} / {LOOP_COUNT}";
+            using (HoverTextPanel panel = new HoverTextPanel(_runtime.transform)) // 테스트 호버 패널
+            {
+                SetField(reactor, "_hoverTextPanel", panel);
+                UserSettingsRepository settings = new UserSettingsRepository(
+                    new AppDataStore(_root, new PresetAssetStore(_root))); // 테스트 카운트 저장소
+                settings.SaveTotalInputCount(12);
+                typeof(ReactorController).GetMethod("HandleActivityAccepted", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(reactor, new object[] { default(ActivityInputEvent) });
+                panel.UpdateHover(true, new Rect(400, 200, 100, 100), new Rect(0, 0, 1280, 720));
+                Canvas.ForceUpdateCanvases();
+                TextMeshProUGUI label = panel.PanelRect.GetComponentInChildren<TextMeshProUGUI>(); // 호버 문구 표시기
+                label.ForceMeshUpdate();
+                Assert.That(label.GetParsedText(), Is.EqualTo("12 / 12"));
+                reactor.ResetInputCount();
+                panel.UpdateHover(true, new Rect(400, 200, 100, 100), new Rect(0, 0, 1280, 720));
+                label.ForceMeshUpdate();
+                Assert.That(label.GetParsedText(), Is.EqualTo("0 / 0"));
+                Assert.That(_machine.CurrentNormalImageIndex, Is.Zero);
+                SetField(reactor, "_hoverTextPanel", null);
+            }
+        }
+
+        // 활성 프리셋 변경이 호버 문구와 환산 루프 수를 갱신하는지 검증하는 함수
+        [Test]
+        public void ApplyPreset_RefreshesHoverTextWithActiveNormalImageCount()
+        {
+            ReactorController reactor = _runtime.GetComponent<ReactorController>(); // 테스트 런타임 연결기
+            PresetData active = _machine.ActivePreset; // 테스트 활성 프리셋
+            active.HoverTextTemplate = "변경 {LOOP_COUNT}";
+            active.NormalImages.Add(active.NormalImages[0]);
+            using (HoverTextPanel panel = new HoverTextPanel(_runtime.transform)) // 테스트 호버 패널
+            {
+                SetField(reactor, "_hoverTextPanel", panel);
+                UserSettingsRepository settings = new UserSettingsRepository(
+                    new AppDataStore(_root, new PresetAssetStore(_root))); // 테스트 카운트 저장소
+                settings.SaveTotalInputCount(active.NormalImages.Count * 3);
+                reactor.ApplyPreset(active);
+                panel.UpdateHover(true, new Rect(400, 200, 100, 100), new Rect(0, 0, 1280, 720));
+                Canvas.ForceUpdateCanvases();
+                TextMeshProUGUI label = panel.PanelRect.GetComponentInChildren<TextMeshProUGUI>(); // 호버 문구 표시기
+                label.ForceMeshUpdate();
+                Assert.That(label.GetParsedText(), Is.EqualTo("변경 3"));
+                SetField(reactor, "_hoverTextPanel", null);
+            }
+        }
+
         // 한국어 글꼴과 UI 배치를 렌더링해 검증 이미지를 생성하는 함수
         [TestCase(800, 680, false)]
         [TestCase(320, 560, false)]

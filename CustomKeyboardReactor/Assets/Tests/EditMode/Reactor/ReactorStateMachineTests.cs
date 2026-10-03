@@ -218,6 +218,37 @@ namespace CustomKeyboardReactor.Tests.EditMode
             Assert.That(loopCount, Is.EqualTo(expectedLoopCount));
         }
 
+        // 공용 대기 시간의 양 끝에서도 입력과 설정 정지가 유지되는지 검증하는 함수
+        [TestCase(60d)]
+        [TestCase(3600d)]
+        public void IdleTimeout_ResumesAfterSettingsAtSupportedLimits(double timeout)
+        {
+            ReactorStateMachine stateMachine = new ReactorStateMachine(CreatePreset(1, 1), true, timeout); // 반응 상태 머신
+            stateMachine.AdvanceTime(timeout - 1);
+            stateMachine.OpenSettings();
+            Assert.That(stateMachine.AdvanceTime(timeout * 2), Is.False);
+            stateMachine.CloseSettings();
+            Assert.That(stateMachine.AdvanceTime(1), Is.True);
+            Assert.That(stateMachine.CurrentState, Is.EqualTo(ReactorState.Idle));
+            Assert.That(stateMachine.HandleActivity(), Is.True);
+            Assert.That(stateMachine.CurrentNormalImageIndex, Is.Zero);
+        }
+
+        // 설정 중 대기를 끄면 닫은 뒤 첫 일반 이미지로 복귀하는지 검증하는 함수
+        [Test]
+        public void DisableIdleWhileConfiguring_RestoresReactingWhenSettingsClose()
+        {
+            ReactorStateMachine stateMachine = new ReactorStateMachine(CreatePreset(2, 1), true, 60); // 반응 상태 머신
+            stateMachine.AdvanceTime(60);
+            stateMachine.OpenSettings();
+            stateMachine.SetIdleSettings(false, 60);
+            Assert.That(stateMachine.CurrentState, Is.EqualTo(ReactorState.Configuring));
+            stateMachine.CloseSettings();
+            Assert.That(stateMachine.CurrentState, Is.EqualTo(ReactorState.Reacting));
+            Assert.That(stateMachine.CurrentNormalImageIndex, Is.Zero);
+            Assert.That(stateMachine.AdvanceTime(3600), Is.False);
+        }
+
         // 지정한 수의 일반 이미지와 대기 이미지를 가진 테스트 프리셋을 생성하는 함수
         private static PresetData CreatePreset(int normalImageCount, int idleImageCount)
         {

@@ -23,6 +23,8 @@ namespace CustomKeyboardReactor
         private OverlayWindowController _overlayWindowController; // 오버레이 창 컨트롤러
         private OverlayContextMenuController _contextMenu; // 우클릭 메뉴
         private SettingsWindowController _settingsWindow; // 설정 화면
+        private HoverTextPanel _hoverTextPanel; // 호버 텍스트 패널
+        private readonly Vector3[] _displayAreaCorners = new Vector3[4]; // 공통 표시 영역 화면 모서리
         private Action _openSettings; // 설정 상태 진입 함수
         private Action _closeSettings; // 설정 상태 종료 함수
         private Coroutine _monitorTransitionCoroutine; // 모니터 전환 처리 코루틴
@@ -35,6 +37,31 @@ namespace CustomKeyboardReactor
         {
             _settingsWindow = settingsWindow;
             _contextMenu.SetUiScale(_settings.UiScalePercent);
+        }
+
+        // 캐릭터 호버에 반응할 텍스트 패널을 연결하는 함수
+        public void SetHoverTextPanel(HoverTextPanel hoverTextPanel)
+        {
+            _hoverTextPanel = hoverTextPanel;
+        }
+
+        // 공유 포인터 좌표와 캐릭터 알파를 기준으로 호버 표시를 갱신하는 함수
+        private void LateUpdate()
+        {
+            if (_hoverTextPanel == null) return;
+            if (_presenter?.DisplayAreaRect == null || _monitorTransitionCoroutine != null ||
+                !TryGetPointerPosition(out Vector2 pointerPosition))
+            {
+                _hoverTextPanel.Hide();
+                return;
+            }
+            bool uiHovered = (_settingsWindow != null && _settingsWindow.ContainsScreenPoint(pointerPosition)) ||
+                             (_contextMenu != null && _contextMenu.ContainsScreenPoint(pointerPosition)); // 자체 UI 호버 여부
+            _presenter.DisplayAreaRect.GetWorldCorners(_displayAreaCorners);
+            Rect displayArea = Rect.MinMaxRect(_displayAreaCorners[0].x, _displayAreaCorners[0].y,
+                _displayAreaCorners[2].x, _displayAreaCorners[2].y); // 공통 표시 영역 화면 경계
+            _hoverTextPanel.UpdateHover(!uiHovered && IsCharacterInteractive(pointerPosition),
+                displayArea, new Rect(0, 0, Screen.width, Screen.height));
         }
 
         // 공용 설정과 모니터 및 메뉴 배율을 갱신하는 함수

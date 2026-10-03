@@ -20,6 +20,7 @@ namespace CustomKeyboardReactor
         private ReactorStateMachine _stateMachine; // 반응 상태 머신
         private CharacterPresenter _characterPresenter; // 캐릭터 표시기
         private CharacterInteractionController _characterInteractionController; // 캐릭터 상호작용 컨트롤러
+        private HoverTextPanel _hoverTextPanel; // 호버 텍스트 패널
         private PresetData _activePreset; // 활성 프리셋
         private GlobalSettingsData _globalSettings; // 공용 설정
         private Coroutine _runtimeCoroutine; // 런타임 상태 처리 코루틴
@@ -58,6 +59,7 @@ namespace CustomKeyboardReactor
                 _activityInputController.MouseButtonReactionEnabled = settings.MouseReactionEnabled;
             }
             _characterInteractionController.UpdateSettings(settings);
+            _hoverTextPanel?.SetSettings(settings);
         }
 
         // 전체 입력 수를 초기화하는 함수
@@ -65,6 +67,7 @@ namespace CustomKeyboardReactor
         {
             if (_activityInputController != null) _activityInputController.ResetTotalInputCount();
             else _userSettingsRepository.SaveTotalInputCount(0);
+            RefreshHoverText();
         }
 
         // 앱 데이터를 기본 원본으로 초기화하고 런타임에 반영하는 함수
@@ -191,6 +194,10 @@ namespace CustomKeyboardReactor
                 _userSettingsRepository,
                 OpenSettings,
                 CloseSettings);
+            _hoverTextPanel = new HoverTextPanel(transform);
+            _hoverTextPanel.SetSettings(_globalSettings);
+            _characterInteractionController.SetHoverTextPanel(_hoverTextPanel);
+            RefreshHoverText();
             _settingsWindowController = gameObject.GetComponent<SettingsWindowController>() ??
                 gameObject.AddComponent<SettingsWindowController>();
             _settingsWindowController.Initialize(this, _presetRepository, _presetAssetStore, _userSettingsRepository);
@@ -248,6 +255,10 @@ namespace CustomKeyboardReactor
             {
                 PresentCurrentImage();
             }
+            else
+            {
+                RefreshHoverText();
+            }
         }
 
         // 상태 머신의 현재 이미지를 캐릭터 표시기에 반영하는 함수
@@ -256,11 +267,19 @@ namespace CustomKeyboardReactor
             _characterPresenter.Present(
                 _stateMachine.CurrentImage,
                 _activePreset.CharacterScalePercent);
+            RefreshHoverText();
+        }
+
+        // 현재 활성 프리셋과 전체 입력 수를 호버 패널에 반영하는 함수
+        private void RefreshHoverText()
+        {
+            _hoverTextPanel?.SetContent(_activePreset, TotalInputCount);
         }
 
         // 입력 이벤트와 런타임 코루틴 연결을 정리하는 함수
         private void OnDisable()
         {
+            _hoverTextPanel?.Hide();
             if (_runtimeCoroutine != null)
             {
                 StopCoroutine(_runtimeCoroutine);
@@ -273,6 +292,13 @@ namespace CustomKeyboardReactor
                 _activityInputController.ActivityAccepted -= HandleActivityAccepted;
                 _activityInputController = null;
             }
+        }
+
+        // 반응 컨트롤러가 소유한 호버 패널 리소스를 정리하는 함수
+        private void OnDestroy()
+        {
+            _hoverTextPanel?.Dispose();
+            _hoverTextPanel = null;
         }
     }
 }
